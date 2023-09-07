@@ -63,8 +63,9 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 	for iter := dataset.FlatStatefulIterator(); iter.HasNext(); {
 		element := iter.Next()
 		dicomInfo[element.Tag.String()] = element.Value.String()
+		logger.Println(element.Tag.String(), " = ", element.Value.String())
 	}
-	logger.Println("dicomInfo for :", dicomFilePath, " is :", dicomInfo)
+	logger.Println(dicomFilePath, " is a valid dicom")
 	return dicomInfo, nil
 }
 
