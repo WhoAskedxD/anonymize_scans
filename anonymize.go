@@ -1,4 +1,4 @@
-package anonymizescans
+package anonymize_scans
 
 import (
 	"io/fs"
