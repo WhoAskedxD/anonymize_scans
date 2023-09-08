@@ -81,11 +81,12 @@ func GetDicomFolders(homeDirectory, filePath string) {
 	//check if filePath given is a dicom
 	dicomInfo, err := DicomInfoGrabber(filePath)
 	if err != nil {
-		logger.Println("Error parsing or File is not a dicom..")
+		logger.Println("Error parsing or File is not a dicom..", err)
 	}
 	//if the file is a dicom
 	if dicomInfo != nil {
 		dicomFolder := strings.TrimPrefix(filePath, homeDirectory)
+		dicomFolder = strings.TrimLeft(dicomFolder, "/") //removes the leading /
 		logger.Println(dicomFolder)
 	}
 
@@ -94,7 +95,9 @@ func GetDicomFolders(homeDirectory, filePath string) {
 // creates a logger for the functions. generates a text file and logs all the output to the text file.
 func createLogger(logFileName string) (*log.Logger, *os.File, error) {
 	// Create or open the log file
-	logFile, err := os.Create(logFileName)
+	//logFile, err := os.Create(logFileName)
+	logFile, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+
 	if err != nil {
 		return nil, nil, err
 	}
