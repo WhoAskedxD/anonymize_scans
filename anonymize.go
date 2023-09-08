@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/suyashkumar/dicom"
 )
@@ -26,8 +27,7 @@ func GetFilePathsInFolders(directoryPath string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-
-		// Check if the entry is a regular file
+		// Check if the entry is a regular file, if not a dir add to the list.
 		if !d.IsDir() {
 			filePaths = append(filePaths, path)
 		}
@@ -52,7 +52,6 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 		return nil, err
 	}
 	defer logFile.Close()
-
 	logger.Println("checking if :", dicomFilePath, " is a valid Dicom..")
 	dicomInfo := make(map[string]string)
 	dataset, err := dicom.ParseFile(dicomFilePath, nil)
@@ -69,6 +68,30 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 	return dicomInfo, nil
 }
 
+// searches the filepaths and if dicom file exist make note of the parent directory and return the parent directory.
+func GetDicomFolders(homeDirectory, filePath string) {
+	logFileName := "VerifyDicomFolder.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for DicomInfoGrabber:", err)
+		return
+	}
+	defer logFile.Close()
+	logger.Println("checking if for folders that contain valid dicoms..")
+	//check if filePath given is a dicom
+	dicomInfo, err := DicomInfoGrabber(filePath)
+	if err != nil {
+		logger.Println("Error parsing or File is not a dicom..")
+	}
+	//if the file is a dicom
+	if dicomInfo != nil {
+		dicomFolder := strings.TrimPrefix(filePath, homeDirectory)
+		logger.Println(dicomFolder)
+	}
+
+}
+
+// creates a logger for the functions. generates a text file and logs all the output to the text file.
 func createLogger(logFileName string) (*log.Logger, *os.File, error) {
 	// Create or open the log file
 	logFile, err := os.Create(logFileName)
