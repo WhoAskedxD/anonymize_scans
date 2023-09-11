@@ -68,28 +68,103 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 	return dicomInfo, nil
 }
 
-// searches the filepaths and if dicom file exist make note of the parent directory and return the parent directory.
-func GetDicomFolders(homeDirectory, filePath string) {
-	logFileName := "VerifyDicomFolder.txt"
+// takes a dicomFile and checks to see what type of scan it is.
+func CheckScanType(dicomFilePath string) (string, error) {
+	//creates a logger for log files.
+	logFileName := "CheckScanType.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
-		fmt.Println("Error making log file for DicomInfoGrabber:", err)
+		fmt.Println("Error making log file for CheckScanType:", err)
+		return "Error making log file for CheckScanType:", err
+	}
+	defer logFile.Close()
+	//start of script
+	logger.Printf("checking to see what type of scan %s is", dicomFilePath)
+	//check to see if file path given is a valid dicom
+	dicomInfo, err := DicomInfoGrabber(dicomFilePath)
+	if err != nil {
+		logger.Printf("%s is not a valid dicom file", dicomFilePath)
+		return "Invalid dicom file", err
+	}
+	//set default value for ScanType in the event 1 cannot be determined
+	scanType := "NA"
+	//if file is a valid dicom check this SOPClassUID
+	if dicomInfo != nil {
+		logger.Printf("reading %s", dicomFilePath)
+		SOPClassUID := "(0008,0016)"
+		//referrence
+		//"1.2.840.10008.5.1.4.1.1.7" [ Secondary Capture Image Storage ] - Possibly pano Need to check Image Type as well
+		//"1.2.840.10008.5.1.4.1.1.1.1" [ Digital X-Ray Image Storage - For Presentation ] - Ceph
+		//"1.2.840.10008.5.1.4.1.1.2" [ CT Image Storage ] - Regular CT Scan
+		//Value grabs the value from the map given the key, and found returns a boolean if key exist found will be true
+		value, found := dicomInfo[SOPClassUID]
+		if found {
+			switch value {
+			case "[1.2.840.10008.5.1.4.1.1.7]":
+				logger.Printf("SOPClassUID is: %s, Possibly Pano or Saved Scene", value)
+				ImageType := "(0008,0008)"
+				//ImageType := "(0008,0008)"
+				//referrence
+				//"[ORIGINAL PRIMARY AXIAL]" - Regular CT Scan
+				//"[ORIGINAL PRIMARY ]" - Pano or Ceph Scans.
+				//"[DERIVED SECONDARY TERARECON]" - Saved Scene.
+				image, found := dicomInfo[ImageType]
+				if found {
+					switch image {
+					case "[ORIGINAL PRIMARY ]":
+						logger.Printf("Scan is a %s %s", scanType, image)
+						scanType = "PANO"
+					case "[DERIVED SECONDARY TERARECON]":
+						scanType = "Scene"
+						logger.Printf("Scan is a %s %s", scanType, image)
+					default:
+						logger.Printf("Scan mode not found. ImageType is :%s", image)
+					}
+				}
+			case "[1.2.840.10008.5.1.4.1.1.1.1]":
+				scanType = "CEPH"
+				logger.Printf("SOPClassUID is: %s %s scan", value, scanType)
+			case "[1.2.840.10008.5.1.4.1.1.2]":
+				scanType = "CT"
+				logger.Printf("SOPClassUID is: %s %s Scan", value, scanType)
+			default:
+				logger.Printf("Scan mode not found. SOPClassUID is :%s", value)
+			}
+		} else {
+			logger.Printf("key %s not found in the map..", SOPClassUID)
+		}
+	}
+	return scanType, nil
+}
+
+// searches the directory given(searchFolder) and checks if it is a valid dicom folder.
+func GetDicomFolders(homeDirectory, searchFolder string) {
+	//creates a logger for log files.
+	logFileName := "GetDicomFolders.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for GetDicomFolders:", err)
 		return
 	}
 	defer logFile.Close()
-	logger.Println("checking if for folders that contain valid dicoms..")
+	//start of script
+	logger.Printf("checking if %s contain valid dicoms.. with root directory as %s", searchFolder, homeDirectory)
 	//check if filePath given is a dicom
-	dicomInfo, err := DicomInfoGrabber(filePath)
+	filePaths, err := GetFilePathsInFolders(searchFolder)
 	if err != nil {
-		logger.Println("Error parsing or File is not a dicom..", err)
+		logger.Println("grabbing filePaths:", err)
 	}
-	//if the file is a dicom
-	if dicomInfo != nil {
-		dicomFolder := strings.TrimPrefix(filePath, homeDirectory)
-		dicomFolder = strings.TrimLeft(dicomFolder, "/") //removes the leading /
-		logger.Println(dicomFolder)
+	for _, file := range filePaths {
+		dicomInfo, err := DicomInfoGrabber(file)
+		if err != nil {
+			logger.Printf("%s is not a valid dicom file", file)
+		}
+		if dicomInfo != nil {
+			dicomFolder := strings.TrimPrefix(file, homeDirectory)
+			dicomFolder = strings.TrimLeft(dicomFolder, "/") //removes the leading /
+			logger.Println(dicomFolder)
+		}
 	}
-
 }
 
 // creates a logger for the functions. generates a text file and logs all the output to the text file.
