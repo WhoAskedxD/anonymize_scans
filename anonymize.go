@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
+	"time"
 
 	"github.com/suyashkumar/dicom"
 )
@@ -52,6 +52,7 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 		return nil, err
 	}
 	defer logFile.Close()
+	//start of script
 	logger.Println("checking if :", dicomFilePath, " is a valid Dicom..")
 	dicomInfo := make(map[string]string)
 	dataset, err := dicom.ParseFile(dicomFilePath, nil)
@@ -68,7 +69,59 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 	return dicomInfo, nil
 }
 
-// takes a dicomFile and checks to see what type of scan it is.
+// takes a dicom folder path and check to see if the folder is a CT scan| pano | Ceph | saved scene - some CT scans can contain panos and scenes
+func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
+	startTime := time.Now()
+	//creates a logger for log files.
+	logFileName := "CheckDicomFolder.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for CheckDicomFolder:", err)
+		// return "Error making log file for CheckDicomFolder:", err
+		return nil, err
+	}
+	defer logFile.Close()
+	//start of script
+	logger.Printf("checking to see if %s is a regular CT Scan or others", dicomFolderPath)
+	folderFiles, err := GetFilePathsInFolders(dicomFolderPath)
+	if err != nil {
+		logger.Println("error grabbing folderFiles", err)
+		return nil, err
+	}
+	folderInfo := make(map[string]string)
+	folderInfo["PARENT_FOLDER"] = dicomFolderPath
+	previousScanType := "NA"
+	for _, file := range folderFiles {
+		currentScanType, err := CheckScanType(file)
+		if err != nil {
+			//fmt.Println("ran into an issue checking scan type for :", file)
+			continue // Skip the rest of the loop and move to the next iteration
+		}
+		path := filepath.Dir(file) // Remove the last part of the path and returns the directory
+		//logger.Printf("current scan type for %s is %s", path, currentScanType)
+		//check to see if the scan type(key) already exist inside the map
+		value, ok := folderInfo[currentScanType] //returns ok with a value of true if it exist.
+		if ok {
+			//check to see if the current value for the key matches the current path if so break out of the loop
+			fmt.Printf("Key %s exists, and its value is %s\nPath right now is %s\n", currentScanType, value, path)
+		} else {
+			fmt.Printf("Key %s does not exist in the map\n", currentScanType)
+		}
+		//multiple CT scans in a directory no point in checking each file.
+		if currentScanType == previousScanType {
+			continue
+		}
+		folderInfo[currentScanType] = path
+		previousScanType = currentScanType
+	}
+	logger.Println("folderInfo is :\n", folderInfo)
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	fmt.Printf("Elapsed time: %.2f seconds for CheckDicomFolder\n", elapsedTime.Seconds())
+	return folderInfo, nil
+}
+
+// takes a dicomFile and checks to see what type of scan it is returns a string of either NA|CT|PANO|CEPH
 func CheckScanType(dicomFilePath string) (string, error) {
 	//creates a logger for log files.
 	logFileName := "CheckScanType.txt"
@@ -111,10 +164,10 @@ func CheckScanType(dicomFilePath string) (string, error) {
 				image, found := dicomInfo[ImageType]
 				if found {
 					switch image {
-					case "[ORIGINAL PRIMARY ]":
+					case "[ORIGINAL PRIMARY ]": //pano
 						logger.Printf("Scan is a %s %s", scanType, image)
 						scanType = "PANO"
-					case "[DERIVED SECONDARY TERARECON]":
+					case "[DERIVED SECONDARY TERARECON]": //scene
 						scanType = "Scene"
 						logger.Printf("Scan is a %s %s", scanType, image)
 					default:
@@ -137,34 +190,43 @@ func CheckScanType(dicomFilePath string) (string, error) {
 	return scanType, nil
 }
 
-// searches the directory given(searchFolder) and checks if it is a valid dicom folder.
-func GetDicomFolders(homeDirectory, searchFolder string) {
+// searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.
+func GetDicomFolders(searchFolder string) ([]string, error) {
+	startTime := time.Now()
 	//creates a logger for log files.
 	logFileName := "GetDicomFolders.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for GetDicomFolders:", err)
-		return
+		return nil, err
 	}
 	defer logFile.Close()
 	//start of script
-	logger.Printf("checking if %s contain valid dicoms.. with root directory as %s", searchFolder, homeDirectory)
-	//check if filePath given is a dicom
-	filePaths, err := GetFilePathsInFolders(searchFolder)
+	logger.Printf("checking if %s contain valid dicom Folders", searchFolder)
+	//gets a list of all the folders in the searchFolder directory
+	folderList, err := ListDirectories(searchFolder)
 	if err != nil {
-		logger.Println("grabbing filePaths:", err)
+		logger.Println("error getting list of folders:", err)
+		return nil, err
 	}
-	for _, file := range filePaths {
-		dicomInfo, err := DicomInfoGrabber(file)
+	//check to see if the folders in the list are scans
+	var dicomFolders []string
+	for _, folder := range folderList {
+		logger.Println("checking if:", folder, "is a valid dicom folder")
+		folderInfo, err := CheckDicomFolder(folder)
 		if err != nil {
-			logger.Printf("%s is not a valid dicom file", file)
+			logger.Println("error grabbing folderInfo", err)
 		}
-		if dicomInfo != nil {
-			dicomFolder := strings.TrimPrefix(file, homeDirectory)
-			dicomFolder = strings.TrimLeft(dicomFolder, "/") //removes the leading /
-			logger.Println(dicomFolder)
+		//if folderinfo length is greater than 1 that means there is a scan
+		if len(folderInfo) > 1 {
+			logger.Println(folderInfo["PARENT_FOLDER"], "is a valid dicom folder.")
+			dicomFolders = append(dicomFolders, folderInfo["PARENT_FOLDER"])
 		}
 	}
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders\n", elapsedTime.Seconds())
+	return dicomFolders, nil
 }
 
 // creates a logger for the functions. generates a text file and logs all the output to the text file.
@@ -181,4 +243,45 @@ func createLogger(logFileName string) (*log.Logger, *os.File, error) {
 	// Redirect standard output to the logger
 	log.SetOutput(logFile)
 	return logger, logFile, nil
+}
+
+// takes a file path and checks to see if the directory is empty if not return a slice of folder paths
+func ListDirectories(folderPath string) ([]string, error) {
+	// Open the directory
+	dir, err := os.Open(folderPath)
+	if err != nil {
+		// fmt.Println("Error:", err)
+		return nil, err
+	}
+	defer dir.Close()
+	// Read the directory contents
+	fileInfos, err := dir.Readdir(-1)
+	if err != nil {
+		// fmt.Println("Error:", err)
+		return nil, err
+	}
+	// Iterate over the file infos and filter out directories
+	var directories []string
+	for _, fileInfo := range fileInfos {
+		if fileInfo.IsDir() {
+			dirPath := filepath.Join(folderPath, fileInfo.Name()) // Get full directory path
+			if !isEmptyDirectory(dirPath) {
+				directories = append(directories, dirPath)
+			}
+		}
+	}
+	return directories, nil
+}
+
+// Function to check if a directory is empty
+func isEmptyDirectory(dirPath string) bool {
+	// fmt.Println("checking for empty directories", dirPath)
+	dir, err := os.Open(dirPath)
+	if err != nil {
+		return false
+	}
+	defer dir.Close()
+
+	_, err = dir.Readdir(1) // Try to read a single file
+	return err != nil       //checks to see if err !=nil if it does then return value true
 }
