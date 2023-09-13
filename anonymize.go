@@ -69,7 +69,13 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 	return dicomInfo, nil
 }
 
-// takes a dicom folder path and check to see if the folder is a CT scan| pano | Ceph | saved scene - some CT scans can contain panos and scenes
+// takes a parent dicomFolderPath with subfolders and returns a map with the key PARENT_FOLDER and value PATH as well as key of Scan type and value of subfolder
+// example map[
+// CT:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.25137155812096533.241906.2572.11
+// PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.25143587972146613.241906.5628.11
+// PARENT_FOLDER:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061
+// Scene:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.206729801520575063.241906.824.11
+// ]
 func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
@@ -90,7 +96,7 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 		// return "Error making log file for CheckDicomFolder:", err
 		return nil, err
 	}
-	logger.Printf("Found subFolders\n%s\nin %s", subFolderList, dicomFolderPath)
+	logger.Printf("Found subFolders\n%s in %s\n", subFolderList, dicomFolderPath)
 	//make a map for the Parent and sub folder info
 	folderInfo := make(map[string]string)
 	folderInfo["PARENT_FOLDER"] = dicomFolderPath
@@ -110,15 +116,6 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 			}
 			path := filepath.Dir(file) // Remove the last part of the path and returns the directory
 			logger.Printf("current scan type for %s is %s", path, currentScanType)
-			//check to see if the scan type(key) already exist inside the map
-			// value, ok := folderInfo[currentScanType] //returns ok with a value of true if it exist.
-			// if ok {
-			// 	//check to see if the current value for the key matches the current path if so break out of the loop
-			// 	fmt.Printf("Key %s exists, and its value is %s\nPath right now is %s\n", currentScanType, value, path)
-			// } else {
-			// 	fmt.Printf("Key %s does not exist in the map\n", currentScanType)
-			// }
-			//multiple CT scans in a directory no point in checking each file.
 			if currentScanType == previousScanType {
 				logger.Printf("Current Scan type is the same as the last possibly in a CT Scan breaking out of %s", path)
 				break
