@@ -83,36 +83,49 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	defer logFile.Close()
 	//start of script
 	logger.Printf("checking to see if %s is a regular CT Scan or others", dicomFolderPath)
-	folderFiles, err := GetFilePathsInFolders(dicomFolderPath)
+	//grab the subfolders in the parent folder to check which sub folder is which type of scan
+	subFolderList, err := ListDirectories(dicomFolderPath)
 	if err != nil {
-		logger.Println("error grabbing folderFiles", err)
+		fmt.Println("Error getting subfolderList CheckDicomFolder:", err)
+		// return "Error making log file for CheckDicomFolder:", err
 		return nil, err
 	}
+	logger.Printf("Found subFolders\n%s\nin %s", subFolderList, dicomFolderPath)
+	//make a map for the Parent and sub folder info
 	folderInfo := make(map[string]string)
 	folderInfo["PARENT_FOLDER"] = dicomFolderPath
-	previousScanType := "NA"
-	for _, file := range folderFiles {
-		currentScanType, err := CheckScanType(file)
+	for _, subFolder := range subFolderList {
+		logger.Printf("subFolder checking %s\n", subFolder)
+		folderFiles, err := GetFilePathsInFolders(subFolder)
 		if err != nil {
-			//fmt.Println("ran into an issue checking scan type for :", file)
-			continue // Skip the rest of the loop and move to the next iteration
+			logger.Println("error grabbing folderFiles", err)
+			return nil, err
 		}
-		path := filepath.Dir(file) // Remove the last part of the path and returns the directory
-		//logger.Printf("current scan type for %s is %s", path, currentScanType)
-		//check to see if the scan type(key) already exist inside the map
-		value, ok := folderInfo[currentScanType] //returns ok with a value of true if it exist.
-		if ok {
-			//check to see if the current value for the key matches the current path if so break out of the loop
-			fmt.Printf("Key %s exists, and its value is %s\nPath right now is %s\n", currentScanType, value, path)
-		} else {
-			fmt.Printf("Key %s does not exist in the map\n", currentScanType)
+		previousScanType := "NA"
+		for _, file := range folderFiles {
+			currentScanType, err := CheckScanType(file)
+			if err != nil {
+				//fmt.Println("ran into an issue checking scan type for :", file)
+				continue // Skip the rest of the loop and move to the next iteration
+			}
+			path := filepath.Dir(file) // Remove the last part of the path and returns the directory
+			logger.Printf("current scan type for %s is %s", path, currentScanType)
+			//check to see if the scan type(key) already exist inside the map
+			// value, ok := folderInfo[currentScanType] //returns ok with a value of true if it exist.
+			// if ok {
+			// 	//check to see if the current value for the key matches the current path if so break out of the loop
+			// 	fmt.Printf("Key %s exists, and its value is %s\nPath right now is %s\n", currentScanType, value, path)
+			// } else {
+			// 	fmt.Printf("Key %s does not exist in the map\n", currentScanType)
+			// }
+			//multiple CT scans in a directory no point in checking each file.
+			if currentScanType == previousScanType {
+				logger.Printf("Current Scan type is the same as the last possibly in a CT Scan breaking out of %s", path)
+				break
+			}
+			folderInfo[currentScanType] = path
+			previousScanType = currentScanType
 		}
-		//multiple CT scans in a directory no point in checking each file.
-		if currentScanType == previousScanType {
-			continue
-		}
-		folderInfo[currentScanType] = path
-		previousScanType = currentScanType
 	}
 	logger.Println("folderInfo is :\n", folderInfo)
 	endTime := time.Now()
