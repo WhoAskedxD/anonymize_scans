@@ -11,62 +11,43 @@ import (
 	"github.com/suyashkumar/dicom"
 )
 
-// searches through the provided folder and gives all the filepaths as a slice.
-func GetFilePathsInFolders(directoryPath string) ([]string, error) {
-	logFileName := "GetFilePathsInSubfolders.txt"
+// searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.
+func GetDicomFolders(searchFolder string) ([]string, error) {
+	startTime := time.Now()
+	//creates a logger for log files.
+	logFileName := "GetDicomFolders.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
-		fmt.Println("Error making log file for GetFilePathsInSubfolders", err)
-		return nil, err
-	}
-	defer logFile.Close()
-	logger.Println("Searching through path:", directoryPath)
-	var filePaths []string
-	// Walk through the directory and its subdirectories
-	err = filepath.WalkDir(directoryPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		// Check if the entry is a regular file, if not a dir add to the list.
-		if !d.IsDir() {
-			filePaths = append(filePaths, path)
-		}
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-	for _, paths := range filePaths {
-		logger.Println(paths)
-	}
-	return filePaths, nil
-}
-
-// checks to see if the filepath provided is a dicom file if so return meta data.
-func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
-	logFileName := "DicomInfoGrabber.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for DicomInfoGrabber:", err)
+		fmt.Println("Error making log file for GetDicomFolders:", err)
 		return nil, err
 	}
 	defer logFile.Close()
 	//start of script
-	logger.Println("checking if :", dicomFilePath, " is a valid Dicom..")
-	dicomInfo := make(map[string]string)
-	dataset, err := dicom.ParseFile(dicomFilePath, nil)
+	logger.Printf("checking if %s contain valid dicom Folders", searchFolder)
+	//gets a list of all the folders in the searchFolder directory
+	folderList, err := ListDirectories(searchFolder)
 	if err != nil {
-		logger.Println("Error parsing :", dicomFilePath)
+		logger.Println("error getting list of folders:", err)
 		return nil, err
 	}
-	for iter := dataset.FlatStatefulIterator(); iter.HasNext(); {
-		element := iter.Next()
-		dicomInfo[element.Tag.String()] = element.Value.String()
-		logger.Println(element.Tag.String(), " = ", element.Value.String())
+	//check to see if the folders in the list are scans
+	var dicomFolders []string
+	for _, folder := range folderList {
+		logger.Println("checking if:", folder, "is a valid dicom folder")
+		folderInfo, err := CheckDicomFolder(folder)
+		if err != nil {
+			logger.Println("error grabbing folderInfo", err)
+		}
+		//if folderinfo length is greater than 1 that means there is a scan
+		if len(folderInfo) > 1 {
+			logger.Println(folderInfo["PARENT_FOLDER"], "is a valid dicom folder.")
+			dicomFolders = append(dicomFolders, folderInfo["PARENT_FOLDER"])
+		}
 	}
-	logger.Println(dicomFilePath, " is a valid dicom")
-	return dicomInfo, nil
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders\n", elapsedTime.Seconds())
+	return dicomFolders, nil
 }
 
 // takes a parent dicomFolderPath with subfolders and returns a map with the key PARENT_FOLDER and value PATH as well as key of Scan type and value of subfolder
@@ -200,43 +181,30 @@ func CheckScanType(dicomFilePath string) (string, error) {
 	return scanType, nil
 }
 
-// searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.
-func GetDicomFolders(searchFolder string) ([]string, error) {
-	startTime := time.Now()
-	//creates a logger for log files.
-	logFileName := "GetDicomFolders.txt"
+// checks to see if the filepath provided is a dicom file if so return meta data.
+func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
+	logFileName := "DicomInfoGrabber.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
-		fmt.Println("Error making log file for GetDicomFolders:", err)
+		fmt.Println("Error making log file for DicomInfoGrabber:", err)
 		return nil, err
 	}
 	defer logFile.Close()
 	//start of script
-	logger.Printf("checking if %s contain valid dicom Folders", searchFolder)
-	//gets a list of all the folders in the searchFolder directory
-	folderList, err := ListDirectories(searchFolder)
+	logger.Println("checking if :", dicomFilePath, " is a valid Dicom..")
+	dicomInfo := make(map[string]string)
+	dataset, err := dicom.ParseFile(dicomFilePath, nil)
 	if err != nil {
-		logger.Println("error getting list of folders:", err)
+		logger.Println("Error parsing :", dicomFilePath)
 		return nil, err
 	}
-	//check to see if the folders in the list are scans
-	var dicomFolders []string
-	for _, folder := range folderList {
-		logger.Println("checking if:", folder, "is a valid dicom folder")
-		folderInfo, err := CheckDicomFolder(folder)
-		if err != nil {
-			logger.Println("error grabbing folderInfo", err)
-		}
-		//if folderinfo length is greater than 1 that means there is a scan
-		if len(folderInfo) > 1 {
-			logger.Println(folderInfo["PARENT_FOLDER"], "is a valid dicom folder.")
-			dicomFolders = append(dicomFolders, folderInfo["PARENT_FOLDER"])
-		}
+	for iter := dataset.FlatStatefulIterator(); iter.HasNext(); {
+		element := iter.Next()
+		dicomInfo[element.Tag.String()] = element.Value.String()
+		logger.Println(element.Tag.String(), " = ", element.Value.String())
 	}
-	endTime := time.Now()
-	elapsedTime := endTime.Sub(startTime)
-	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders\n", elapsedTime.Seconds())
-	return dicomFolders, nil
+	logger.Println(dicomFilePath, " is a valid dicom")
+	return dicomInfo, nil
 }
 
 // creates a logger for the functions. generates a text file and logs all the output to the text file.
@@ -294,4 +262,36 @@ func isEmptyDirectory(dirPath string) bool {
 
 	_, err = dir.Readdir(1) // Try to read a single file
 	return err != nil       //checks to see if err !=nil if it does then return value true
+}
+
+// searches through the provided folder and gives all the filepaths as a slice.
+func GetFilePathsInFolders(directoryPath string) ([]string, error) {
+	logFileName := "GetFilePathsInSubfolders.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for GetFilePathsInSubfolders", err)
+		return nil, err
+	}
+	defer logFile.Close()
+	logger.Println("Searching through path:", directoryPath)
+	var filePaths []string
+	// Walk through the directory and its subdirectories
+	err = filepath.WalkDir(directoryPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// Check if the entry is a regular file, if not a dir add to the list.
+		if !d.IsDir() {
+			filePaths = append(filePaths, path)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	for _, paths := range filePaths {
+		logger.Println(paths)
+	}
+	return filePaths, nil
 }
