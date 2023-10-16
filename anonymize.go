@@ -11,8 +11,14 @@ import (
 	"github.com/suyashkumar/dicom"
 )
 
-// searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.
-func GetDicomFolders(searchFolder string) ([]string, error) {
+// searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.If subfolders is a valid DicomFolderStructure add it to the []dicomFolder.
+// dicomFolder is a map with the key being the parent dir path and the value being the folder info
+// example:
+// /Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765:
+// map[CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.12000.1
+// PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.10632.1
+// PARENT_FOLDER:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765]
+func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
 	logFileName := "GetDicomFolders.txt"
@@ -31,7 +37,7 @@ func GetDicomFolders(searchFolder string) ([]string, error) {
 		return nil, err
 	}
 	//check to see if the folders in the list are scans
-	var dicomFolders []string
+	dicomFolders := make(map[string]map[string]string)
 	for _, folder := range folderList {
 		logger.Println("checking if:", folder, "is a valid dicom folder")
 		folderInfo, err := CheckDicomFolder(folder)
@@ -41,11 +47,12 @@ func GetDicomFolders(searchFolder string) ([]string, error) {
 		//if folderinfo length is greater than 1 that means there is a scan
 		if len(folderInfo) > 1 {
 			logger.Println(folderInfo["PARENT_FOLDER"], "is a valid dicom folder.")
-			dicomFolders = append(dicomFolders, folderInfo["PARENT_FOLDER"])
+			dicomFolders[folderInfo["PARENT_FOLDER"]] = folderInfo
 		}
 	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
+	//fmt.Printf("\nScan Info is \n%s\n", scanInfo)
 	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders\n", elapsedTime.Seconds())
 	return dicomFolders, nil
 }
@@ -108,7 +115,7 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	logger.Println("folderInfo is :\n", folderInfo)
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	fmt.Printf("Elapsed time: %.2f seconds for CheckDicomFolder\n", elapsedTime.Seconds())
+	fmt.Printf("Elapsed time: %.2f seconds for CheckDicomFolder on %s\n", elapsedTime.Seconds(), dicomFolderPath)
 	return folderInfo, nil
 }
 
