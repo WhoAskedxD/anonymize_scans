@@ -16,7 +16,7 @@ import (
 func MakeFolderName(parentFolder string, scanContent map[string]string) (string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
-	logFileName := "MakeFolderName.txt"
+	logFileName := "logs/MakeFolderName.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for MakeFolderName:", err)
@@ -25,6 +25,8 @@ func MakeFolderName(parentFolder string, scanContent map[string]string) (string,
 	defer logFile.Close()
 	//start of script
 	logger.Printf("attempting to generate a folder name from %s", parentFolder)
+	//setting folder name result
+	// var folderName string
 	//check the key values of scanContent to see what type of scan it is
 	for key, value := range scanContent {
 		logger.Printf("key: %s, Value:%s\n", key, value)
@@ -46,7 +48,7 @@ func MakeFolderName(parentFolder string, scanContent map[string]string) (string,
 func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
-	logFileName := "GetDicomFolders.txt"
+	logFileName := "logs/GetDicomFolders.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for GetDicomFolders:", err)
@@ -92,7 +94,7 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
-	logFileName := "CheckDicomFolder.txt"
+	logFileName := "logs/CheckDicomFolder.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for CheckDicomFolder:", err)
@@ -147,7 +149,7 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 // takes a dicomFile and checks to see what type of scan it is returns a string of either NA|CT|PANO|CEPH
 func CheckScanType(dicomFilePath string) (string, error) {
 	//creates a logger for log files.
-	logFileName := "CheckScanType.txt"
+	logFileName := "logs/CheckScanType.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for CheckScanType:", err)
@@ -190,7 +192,7 @@ func CheckScanType(dicomFilePath string) (string, error) {
 					case "[ORIGINAL PRIMARY ]": //pano
 						logger.Printf("Scan is a %s %s", scanType, image)
 						scanType = "PANO"
-					case "[ORIGINAL SECONDARY SINGLEPLANE]": //pano
+					case "[ORIGINAL SECONDARY SINGLEPLANE]": //pano from eclipse
 						logger.Printf("Scan is a %s %s", scanType, image)
 						scanType = "PANO"
 					case "[DERIVED SECONDARY TERARECON]": //scene
@@ -218,7 +220,7 @@ func CheckScanType(dicomFilePath string) (string, error) {
 
 // checks to see if the filepath provided is a dicom file if so return meta data.
 func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
-	logFileName := "DicomInfoGrabber.txt"
+	logFileName := "logs/DicomInfoGrabber.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for DicomInfoGrabber:", err)
@@ -245,6 +247,15 @@ func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 // creates a logger for the functions. generates a text file and logs all the output to the text file.
 func createLogger(logFileName string) (*log.Logger, *os.File, error) {
 	// Create or open the log file
+	// Get the directory of the log file
+	logDir := filepath.Dir(logFileName)
+
+	// Create the log directory if it doesn't exist
+	if _, err := os.Stat(logDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(logDir, os.ModePerm); err != nil {
+			return nil, nil, err
+		}
+	}
 	//logFile, err := os.Create(logFileName)
 	logFile, err := os.OpenFile(logFileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 
@@ -301,7 +312,7 @@ func isEmptyDirectory(dirPath string) bool {
 
 // searches through the provided folder and gives all the filepaths as a slice.
 func GetFilePathsInFolders(directoryPath string) ([]string, error) {
-	logFileName := "GetFilePathsInSubfolders.txt"
+	logFileName := "logs/GetFilePathsInSubfolders.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for GetFilePathsInSubfolders", err)
