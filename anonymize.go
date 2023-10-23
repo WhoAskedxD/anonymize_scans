@@ -26,14 +26,35 @@ func MakeFolderName(parentFolder string, scanContent map[string]string) (string,
 	//start of script
 	logger.Printf("attempting to generate a folder name from %s", parentFolder)
 	//setting folder name result
-	// var folderName string
-	//check the key values of scanContent to see what type of scan it is
-	for key, value := range scanContent {
-		logger.Printf("key: %s, Value:%s\n", key, value)
+	var folderName string
+	var dicomFile string
+	//check to see if a CT Scan exist if so grab the Manufacture Model name and FOV
+	ctPath, ctExists := scanContent["CT"]
+	if ctExists {
+		//grab manufacture mode name and fox
+		logger.Printf("CT scan exist for path:%s", ctPath)
+		dicomFiles, err := os.ReadDir(ctPath)
+		if err != nil {
+			fmt.Println("Error reading the directory:", err)
+			return "error", err
+		}
+		//loop thru directory ignoring .DS_Store when it occurs and break out of loop once a dicomFile has been found.
+		for _, dicom := range dicomFiles {
+			if dicom.Name() != ".DS_Store" {
+				dicomFile = filepath.Join(ctPath, dicom.Name())
+				break
+			}
+		}
+		logger.Printf("Checking %s", dicomFile)
+		//grab values from ct scan here
+	} else {
+		//loop thru keys and add it to the folderName
+		logger.Print("No CT scan detected running loop")
 	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	//fmt.Printf("\nScan Info is \n%s\n", scanInfo)
+	logger.Printf("folderName is %s", folderName)
 	fmt.Printf("Elapsed time: %.2f seconds for MakeFolderName\n", elapsedTime.Seconds())
 	return "test", nil
 }
@@ -218,7 +239,7 @@ func CheckScanType(dicomFilePath string) (string, error) {
 	return scanType, nil
 }
 
-// checks to see if the filepath provided is a dicom file if so return meta data.
+// checks to see if the filepath provided is a dicom file if so return dicom info.
 func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
 	logFileName := "logs/DicomInfoGrabber.txt"
 	logger, logFile, err := createLogger(logFileName)
