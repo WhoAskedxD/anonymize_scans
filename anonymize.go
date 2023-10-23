@@ -12,6 +12,7 @@ import (
 )
 
 // takes in the parent folder as a string and the content of that folder as a map, checks what type of scan it is and returns a string with the name.
+// name = last set of number from folder + types of scans + FOV if CT scan is available
 func MakeFolderName(parentFolder string, scanContent map[string]string) (string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
@@ -24,6 +25,10 @@ func MakeFolderName(parentFolder string, scanContent map[string]string) (string,
 	defer logFile.Close()
 	//start of script
 	logger.Printf("attempting to generate a folder name from %s", parentFolder)
+	//check the key values of scanContent to see what type of scan it is
+	for key, value := range scanContent {
+		logger.Printf("key: %s, Value:%s\n", key, value)
+	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	//fmt.Printf("\nScan Info is \n%s\n", scanInfo)
@@ -183,6 +188,9 @@ func CheckScanType(dicomFilePath string) (string, error) {
 				if found {
 					switch image {
 					case "[ORIGINAL PRIMARY ]": //pano
+						logger.Printf("Scan is a %s %s", scanType, image)
+						scanType = "PANO"
+					case "[ORIGINAL SECONDARY SINGLEPLANE]": //pano
 						logger.Printf("Scan is a %s %s", scanType, image)
 						scanType = "PANO"
 					case "[DERIVED SECONDARY TERARECON]": //scene
