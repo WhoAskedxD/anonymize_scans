@@ -11,11 +11,31 @@ import (
 	"github.com/suyashkumar/dicom"
 )
 
+// takes in the parent folder as a string and the content of that folder as a map, checks what type of scan it is and returns a string with the name.
+func MakeFolderName(parentFolder string, scanContent map[string]string) (string, error) {
+	startTime := time.Now()
+	//creates a logger for log files.
+	logFileName := "MakeFolderName.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for MakeFolderName:", err)
+		return "error", err
+	}
+	defer logFile.Close()
+	//start of script
+	logger.Printf("attempting to generate a folder name from %s", parentFolder)
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	//fmt.Printf("\nScan Info is \n%s\n", scanInfo)
+	fmt.Printf("Elapsed time: %.2f seconds for MakeFolderName\n", elapsedTime.Seconds())
+	return "test", nil
+}
+
 // searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.If subfolders is a valid DicomFolderStructure add it to the []dicomFolder.
 // dicomFolder is a map with the key being the parent dir path and the value being the folder info
 // example:
-// /Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765:
-// map[CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.12000.1
+// /Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765:map[
+// CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.12000.1
 // PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.10632.1
 // PARENT_FOLDER:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765]
 func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) {
