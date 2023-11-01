@@ -14,7 +14,7 @@ import (
 )
 
 // takes in the parent folder as a string and the content of that folder as a map, checks what type of scan it is and returns a string with the name.
-// name = last set of number from folder + types of scans + FOV if CT scan is available
+// name = last set of number from folder + types of scans + FOV if CT scan is available example output [PreXion3D Explorer]_PANO+CT+15X15
 func MakeFolderName(parentFolder string, scanContent map[string]string) (string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
@@ -50,7 +50,8 @@ func MakeFolderName(parentFolder string, scanContent map[string]string) (string,
 		logger.Printf("CT scan exist for path:%s", ctPath)
 		dicomFiles, err := os.ReadDir(ctPath)
 		if err != nil {
-			fmt.Println("Error reading the directory:", err)
+			//fmt.Println("Error reading the directory:", err)
+			logger.Println("Error reading the directory:", err)
 			return "error", err
 		}
 		//loop thru directory ignoring .DS_Store when it occurs and break out of loop once a dicomFile has been found.
@@ -160,8 +161,8 @@ func MakeFolderName(parentFolder string, scanContent map[string]string) (string,
 	listOfScans := strings.Join(scanTypes, "+")
 	folderName = modelName + "_" + listOfScans + fov
 	logger.Printf("folderName is %s", folderName)
-	fmt.Printf("Elapsed time: %.2f seconds for MakeFolderName\n", elapsedTime.Seconds())
-	return "test", nil
+	fmt.Printf("Elapsed time: %.2f seconds for MakeFolderName on %s\n", elapsedTime.Seconds(), parentFolder)
+	return folderName, nil
 }
 
 // searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.If subfolders is a valid DicomFolderStructure add it to the []dicomFolder.
@@ -206,7 +207,7 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	//fmt.Printf("\nScan Info is \n%s\n", scanInfo)
-	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders\n", elapsedTime.Seconds())
+	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders searching thru %s\n", elapsedTime.Seconds(), searchFolder)
 	return dicomFolders, nil
 }
 
