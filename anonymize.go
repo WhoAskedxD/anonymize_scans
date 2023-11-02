@@ -13,15 +13,47 @@ import (
 	"github.com/suyashkumar/dicom"
 )
 
-// takes in the parent folder as a string and the content of that folder as a map, checks what type of scan it is and returns a string with the name.
-// name = last set of number from folder + types of scans + FOV if CT scan is available example output [PreXion3D Explorer]_PANO+CT+15X15
-func MakeFolderName(parentFolder string, scanContent map[string]string) (string, error) {
+// takes in a map of map[string]map[string]string from GetDicomFolders, and returns a list of orginal parent folder and the type of scan/possible new scan name
+func GetScanNames(dicomFolders map[string]map[string]string) (map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
-	logFileName := "logs/MakeFolderName.txt"
+	logFileName := "logs/GetScanNames.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
-		fmt.Println("Error making log file for MakeFolderName:", err)
+		fmt.Println("Error making log file for GetScanName:", err)
+		return nil, err
+	}
+	defer logFile.Close()
+	//start of script
+	logger.Printf("Attempting to grab scan details")
+	//create a map to store the dicom directory and scan name/details
+	dicomReference := make(map[string]string)
+	//loop thru the map provided to grab the parent directory and type of scan then assign it to dicomReference
+	for parentFolder, scanContent := range dicomFolders {
+		// fmt.Printf("Key: %s, Value: %s\n", parentFolder, scanContent)
+		newName, err := GetScanName(parentFolder, scanContent)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//logger.Printf("For Folder: %s, Scan Detail is: %s\n", parentFolder, newName)
+		logger.Printf("%s, %s\n", parentFolder, newName)
+		dicomReference[parentFolder] = newName
+	}
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	fmt.Printf("Elapsed time: %.2f seconds for GetScanNames on \n", elapsedTime.Seconds())
+	return dicomReference, nil
+}
+
+// takes in the parent folder as a string and the content of that folder as a map, checks what type of scan it is and returns a string with the name.
+// name = last set of number from folder + types of scans + FOV if CT scan is available example output [PreXion3D Explorer]_PANO+CT+15X15
+func GetScanName(parentFolder string, scanContent map[string]string) (string, error) {
+	startTime := time.Now()
+	//creates a logger for log files.
+	logFileName := "logs/GetScanName.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for GetScanName:", err)
 		return "error", err
 	}
 	defer logFile.Close()
@@ -161,7 +193,7 @@ func MakeFolderName(parentFolder string, scanContent map[string]string) (string,
 	listOfScans := strings.Join(scanTypes, "+")
 	folderName = modelName + "_" + listOfScans + fov
 	logger.Printf("folderName is %s", folderName)
-	fmt.Printf("Elapsed time: %.2f seconds for MakeFolderName on %s\n", elapsedTime.Seconds(), parentFolder)
+	fmt.Printf("Elapsed time: %.2f seconds for GetScanName on %s\n", elapsedTime.Seconds(), parentFolder)
 	return folderName, nil
 }
 
