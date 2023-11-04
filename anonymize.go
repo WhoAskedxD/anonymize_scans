@@ -225,16 +225,19 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 	//check to see if the folders in the list are scans
 	dicomFolders := make(map[string]map[string]string)
 	for _, folder := range folderList {
-		logger.Println("checking if:", folder, "is a valid dicom folder")
+		logger.Println("checking :", folder)
 		folderInfo, err := CheckDicomFolder(folder)
 		if err != nil {
 			logger.Println("error grabbing folderInfo", err)
 		}
 		//if folderinfo length is greater than 1 that means there is a scan
-		if len(folderInfo) > 1 {
-			logger.Println(folderInfo["PARENT_FOLDER"], "is a valid dicom folder.")
-			dicomFolders[folderInfo["PARENT_FOLDER"]] = folderInfo
+		if len(folderInfo) >= 1 {
+			logger.Println(folder, "is a valid dicom folder.")
+			dicomFolders[folder] = folderInfo
 		}
+	}
+	for key, value := range dicomFolders {
+		logger.Printf("folder info is %s\n%s\n\n", key, value)
 	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
@@ -273,8 +276,8 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	logger.Printf("Found subFolders\n%s in %s\n", subFolderList, dicomFolderPath)
 	//make a map for the Parent and sub folder info
 	folderInfo := make(map[string]string)
-	folderInfo["PARENT_FOLDER"] = dicomFolderPath
-	for _, subFolder := range subFolderList {
+	// folderInfo["PARENT_FOLDER"] = dicomFolderPath
+	for index, subFolder := range subFolderList {
 		logger.Printf("subFolder checking %s\n", subFolder)
 		folderFiles, err := GetFilePathsInFolders(subFolder)
 		if err != nil {
@@ -283,22 +286,39 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 		}
 		previousScanType := "NA"
 		for _, file := range folderFiles {
-			currentScanType, err := CheckScanType(file)
+			currentFileInfo, err := CheckScanType(file)
 			if err != nil {
 				//fmt.Println("ran into an issue checking scan type for :", file)
 				continue // Skip the rest of the loop and move to the next iteration
 			}
 			path := filepath.Dir(file) // Remove the last part of the path and returns the directory
-			logger.Printf("current scan type for %s is %s", path, currentScanType)
-			if currentScanType == previousScanType {
-				logger.Printf("Current Scan type is the same as the last possibly in a CT Scan breaking out of %s", path)
+			logger.Printf("Looking at %s", file)
+			_, found := folderInfo[previousScanType]
+			logger.Printf("starting info is:%s\npreviousScantype is: %s\n", folderInfo, previousScanType)
+			if found {
+				logger.Printf("Breaking out of folderFiles loop %s", path)
 				break
 			}
-			folderInfo[currentScanType] = path
-			previousScanType = currentScanType
+			for scan, path := range currentFileInfo {
+				logger.Printf("current scan type is:%s at: %s\n", scan, path)
+				previousScanType = scan
+				value, found := folderInfo[scan]
+				if found && path == value {
+					logger.Printf("Current Scan type is the same as the last possibly in a CT Scan breaking out of %s", path)
+					break
+				} else if found && path != value {
+					newName := scan + strconv.Itoa(index)
+					folderInfo[newName] = path
+					logger.Printf("found new CT scan but with different path making new key: %s\n", newName)
+				} else {
+					folderInfo[scan] = path
+				}
+				logger.Printf("folderinfo currently is:%s", folderInfo)
+			}
+
 		}
 	}
-	logger.Println("folderInfo is :\n", folderInfo)
+	logger.Printf("folderInfo is :%s\n\n\n", folderInfo)
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	fmt.Printf("Elapsed time: %.2f seconds for CheckDicomFolder on %s\n", elapsedTime.Seconds(), dicomFolderPath)
@@ -306,13 +326,13 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 }
 
 // takes a dicomFile and checks to see what type of scan it is returns a string of either NA|CT|PANO|CEPH
-func CheckScanType(dicomFilePath string) (string, error) {
+func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	//creates a logger for log files.
 	logFileName := "logs/CheckScanType.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for CheckScanType:", err)
-		return "Error making log file for CheckScanType:", err
+		return nil, err
 	}
 	defer logFile.Close()
 	//start of script
@@ -321,13 +341,16 @@ func CheckScanType(dicomFilePath string) (string, error) {
 	dicomInfo, err := DicomInfoGrabber(dicomFilePath)
 	if err != nil {
 		logger.Printf("%s is not a valid dicom file", dicomFilePath)
-		return "Invalid dicom file", err
+		return nil, err
 	}
-	//set default value for ScanType in the event 1 cannot be determined
+	// Set default value for ScanType in the event 1 cannot be determined
 	scanType := "NA"
+	// Remove the last part of the file path to give the directory
+	path := filepath.Dir(dicomFilePath)
+	//make a map to store the information
+	dicomContents := make(map[string]string)
 	//if file is a valid dicom check this SOPClassUID
 	if dicomInfo != nil {
-		logger.Printf("reading %s", dicomFilePath)
 		SOPClassUID := "(0008,0016)"
 		//referrence
 		//"1.2.840.10008.5.1.4.1.1.7" [ Secondary Capture Image Storage ] - Possibly pano Need to check Image Type as well
@@ -336,6 +359,7 @@ func CheckScanType(dicomFilePath string) (string, error) {
 		//Value grabs the value from the map given the key, and found returns a boolean if key exist found will be true
 		value, found := dicomInfo[SOPClassUID]
 		if found {
+			logger.Printf("path is %s\n", path)
 			switch value {
 			case "[1.2.840.10008.5.1.4.1.1.7]":
 				logger.Printf("SOPClassUID is: %s, Possibly Pano or Saved Scene", value)
@@ -374,7 +398,13 @@ func CheckScanType(dicomFilePath string) (string, error) {
 			logger.Printf("key %s not found in the map..", SOPClassUID)
 		}
 	}
-	return scanType, nil
+	dicomContents[scanType] = path
+	//if there is a CT scan grab the FOV Value
+	if scanType == "CT" {
+		dicomContents["FOV"] = "15x15XTest"
+	}
+	logger.Printf("end of script content is\n%s\n", dicomContents)
+	return dicomContents, nil
 }
 
 // checks to see if the filepath provided is a dicom file if so return dicom info.
