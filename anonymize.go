@@ -248,6 +248,7 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 
 // takes a parent dicomFolderPath with subfolders and returns a map with the key PARENT_FOLDER and value PATH as well as key of Scan type and value of subfolder
 // example map[
+// ManufacturerModelName:[PreXion3D Explorer]
 // CT:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.25137155812096533.241906.2572.11
 // PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.25143587972146613.241906.5628.11
 // PARENT_FOLDER:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061
@@ -273,49 +274,43 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 		// return "Error making log file for CheckDicomFolder:", err
 		return nil, err
 	}
-	logger.Printf("Found subFolders\n%s in %s\n", subFolderList, dicomFolderPath)
+	logger.Printf("Found %d subFolders\n%s in %s\n", len(subFolderList), subFolderList, dicomFolderPath)
 	//make a map for the Parent and sub folder info
 	folderInfo := make(map[string]string)
 	// folderInfo["PARENT_FOLDER"] = dicomFolderPath
 	for index, subFolder := range subFolderList {
 		logger.Printf("subFolder checking %s\n", subFolder)
+		//entered subfolder grabbing files to loop thru
 		folderFiles, err := GetFilePathsInFolders(subFolder)
 		if err != nil {
 			logger.Println("error grabbing folderFiles", err)
 			return nil, err
 		}
-		previousScanType := "NA"
+		//grab a file from the subfolder and check to see if file is a valid dicom file if so assign the value and break out of the loop
 		for _, file := range folderFiles {
 			currentFileInfo, err := CheckScanType(file)
+			//if the file is not a valid dicom file continue(skip) current file and ignore the rest of the loops function with the "continue"
 			if err != nil {
 				//fmt.Println("ran into an issue checking scan type for :", file)
 				continue // Skip the rest of the loop and move to the next iteration
 			}
-			path := filepath.Dir(file) // Remove the last part of the path and returns the directory
-			logger.Printf("Looking at %s", file)
-			_, found := folderInfo[previousScanType]
-			logger.Printf("starting info is:%s\npreviousScantype is: %s\n", folderInfo, previousScanType)
-			if found {
-				logger.Printf("Breaking out of folderFiles loop %s", path)
-				break
-			}
-			for scan, path := range currentFileInfo {
-				logger.Printf("current scan type is:%s at: %s\n", scan, path)
-				previousScanType = scan
-				value, found := folderInfo[scan]
-				if found && path == value {
-					logger.Printf("Current Scan type is the same as the last possibly in a CT Scan breaking out of %s", path)
-					break
-				} else if found && path != value {
-					newName := scan + strconv.Itoa(index)
-					folderInfo[newName] = path
-					logger.Printf("found new CT scan but with different path making new key: %s\n", newName)
+			logger.Printf("Looking at %s it currently contains\n%s", file, currentFileInfo)
+			logger.Printf("current folder info is :%s", folderInfo)
+			for currentKey, currentValue := range currentFileInfo {
+				value, found := folderInfo[currentKey]
+				if found && value == currentValue {
+					logger.Printf("found duplicate key:%sand value:%s pair breaking out of this loop", currentKey, value)
+					continue // skip assignment for this key value pair
+				} else if found && value != currentValue {
+					newKey := currentKey + strconv.Itoa(index)
+					logger.Printf("found matching key:%s but different values:%s, making a new key:%s", currentKey, currentValue, newKey)
+					folderInfo[newKey] = currentValue
 				} else {
-					folderInfo[scan] = path
+					folderInfo[currentKey] = currentValue
+					logger.Printf("assigning key:%s value:%s to %s", currentKey, currentValue, folderInfo)
 				}
-				logger.Printf("folderinfo currently is:%s", folderInfo)
 			}
-
+			break
 		}
 	}
 	logger.Printf("folderInfo is :%s\n\n\n", folderInfo)
@@ -352,6 +347,7 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	//if file is a valid dicom check this SOPClassUID
 	if dicomInfo != nil {
 		SOPClassUID := "(0008,0016)"
+		ManufacturerModelName := "(0008,1090)"
 		//referrence
 		//"1.2.840.10008.5.1.4.1.1.7" [ Secondary Capture Image Storage ] - Possibly pano Need to check Image Type as well
 		//"1.2.840.10008.5.1.4.1.1.1.1" [ Digital X-Ray Image Storage - For Presentation ] - Ceph
@@ -397,6 +393,13 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 		} else {
 			logger.Printf("key %s not found in the map..", SOPClassUID)
 		}
+		//Look for ManufacturerModelName and add to dicomContents if available
+		modelName, foundModel := dicomInfo[ManufacturerModelName]
+		if foundModel {
+			logger.Printf("found Model name %s\n", modelName)
+			dicomContents["ManufacturerModelName"] = modelName
+		}
+
 	}
 	dicomContents[scanType] = path
 	//if there is a CT scan grab the FOV Value
@@ -405,6 +408,30 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	}
 	logger.Printf("end of script content is\n%s\n", dicomContents)
 	return dicomContents, nil
+}
+
+func GetFOVSize(dicomInfo map[string]string) (string, error) {
+	startTime := time.Now()
+	//creates a logger for log files.
+	logFileName := "logs/GetFOVSize.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for GETFOVSize:", err)
+		return "error", err
+	}
+	defer logFile.Close()
+	//start of script
+	logger.Printf("Starting function GetFOVSize")
+	//setting varible
+	//SOPUID
+	// ManufacturerModelName := "(0008,1090)"
+	// ImagePositionPatient := "(0020,0032)"
+
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	//construct the Folder Name
+	fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
+	return "string", nil
 }
 
 // checks to see if the filepath provided is a dicom file if so return dicom info.
@@ -530,3 +557,23 @@ func GetFilePathsInFolders(directoryPath string) ([]string, error) {
 	}
 	return filePaths, nil
 }
+
+// Block of code for logger
+// startTime := time.Now()
+// //creates a logger for log files.
+// logFileName := "logs/GetFOVSize.txt"
+// logger, logFile, err := createLogger(logFileName)
+// if err != nil {
+// 	fmt.Println("Error making log file for GETFOVSize:", err)
+// 	return "error", err
+// }
+// defer logFile.Close()
+// //start of script
+// logger.Printf("Starting function GetFOVSize")
+// main function starts here
+// main function ends here
+// endTime := time.Now()
+// elapsedTime := endTime.Sub(startTime)
+// //construct the Folder Name
+// fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
+// return "string", nil
