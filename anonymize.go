@@ -13,197 +13,60 @@ import (
 	"github.com/suyashkumar/dicom"
 )
 
-// takes in a map of map[string]map[string]string from GetDicomFolders, and returns a list of orginal parent folder and the type of scan/possible new scan name
-func GetScanNames(dicomFolders map[string]map[string]string) (map[string]string, error) {
+// takes in a map of scan details and constructs a string with the details
+func MakeScanName(scanDetails map[string]string) (string, error) {
 	startTime := time.Now()
-	//creates a logger for log files.
-	logFileName := "logs/GetScanNames.txt"
+	// creates a logger for log files.
+	logFileName := "logs/MakeScanName.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
-		fmt.Println("Error making log file for GetScanName:", err)
-		return nil, err
-	}
-	defer logFile.Close()
-	//start of script
-	logger.Printf("Attempting to grab scan details")
-	//create a map to store the dicom directory and scan name/details
-	dicomReference := make(map[string]string)
-	//loop thru the map provided to grab the parent directory and type of scan then assign it to dicomReference
-	for parentFolder, scanContent := range dicomFolders {
-		// fmt.Printf("Key: %s, Value: %s\n", parentFolder, scanContent)
-		newName, err := GetScanName(parentFolder, scanContent)
-		if err != nil {
-			log.Fatal(err)
-		}
-		//logger.Printf("For Folder: %s, Scan Detail is: %s\n", parentFolder, newName)
-		logger.Printf("%s, %s\n", parentFolder, newName)
-		dicomReference[parentFolder] = newName
-	}
-	endTime := time.Now()
-	elapsedTime := endTime.Sub(startTime)
-	fmt.Printf("Elapsed time: %.2f seconds for GetScanNames on \n", elapsedTime.Seconds())
-	return dicomReference, nil
-}
-
-// takes in the parent folder as a string and the content of that folder as a map, checks what type of scan it is and returns a string with the name.
-// name = last set of number from folder + types of scans + FOV if CT scan is available example output [PreXion3D Explorer]_PANO+CT+15X15
-func GetScanName(parentFolder string, scanContent map[string]string) (string, error) {
-	startTime := time.Now()
-	//creates a logger for log files.
-	logFileName := "logs/GetScanName.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for GetScanName:", err)
+		fmt.Println("Error making log file for MakeScanName:", err)
 		return "error", err
 	}
 	defer logFile.Close()
-	//start of script
-	logger.Printf("attempting to generate a folder name from %s", parentFolder)
-	//setting folder name result
-	var folderName string
-	var modelName string
-	var fov string
-	//dicom file to be checked for values
-	var dicomFile string
-	var scanTypes []string
-	//SOPUID
-	ManufacturerModelName := "(0008,1090)"
-	for key := range scanContent {
-		//logger.Printf("current key:%s", key)
-		if key != "PARENT_FOLDER" {
-			scanTypes = append(scanTypes, key)
+	// start of script
+	logger.Printf("------- Start of MakeScanName Script ---------")
+	//initalizing variables for the scan name
+	var ManufactureModelName string
+	var ListOfScans []string
+	var Fov string
+	var CompleteName string
+	for key, value := range scanDetails {
+		logger.Printf("current key is: %s\nand the value is: %s\n", key, value)
+		switch key {
+		case "ManufacturerModelName":
+			logger.Printf("%s found adding %s to the ManufacturerModelName", key, value)
+			ManufactureModelName = value
+		case "CT":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
+		case "PANO":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
+		case "CEPH":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
+		case "Scene":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
+		case "FOV":
+			logger.Printf("%s found adding %s to the Fov", key, value)
+			Fov = "+" + value
 		}
 	}
-	logger.Printf("Available scanTypes are ,%s", scanTypes)
-	//check to see if a CT Scan exist if so grab the Manufacture Model name and FOV
-	ctPath, ctExists := scanContent["CT"]
-	if ctExists {
-		//grab manufacture mode name and fox
-		logger.Printf("CT scan exist for path:%s", ctPath)
-		dicomFiles, err := os.ReadDir(ctPath)
-		if err != nil {
-			//fmt.Println("Error reading the directory:", err)
-			logger.Println("Error reading the directory:", err)
-			return "error", err
-		}
-		//loop thru directory ignoring .DS_Store when it occurs and break out of loop once a dicomFile has been found.
-		for _, dicom := range dicomFiles {
-			if dicom.Name() != ".DS_Store" {
-				dicomFile = filepath.Join(ctPath, dicom.Name())
-				break
-			}
-		}
-		logger.Printf("Checking %s", dicomFile)
-		//grab values from ct scan here
-		dicomInfo, err := DicomInfoGrabber(dicomFile)
-		if err != nil {
-			logger.Printf("%s is not a valid dicom file", dicomFile)
-			return "Invalid dicom file", err
-		}
-		//if file provided is a valid dicom file grab the ManufactureModelName
-		if dicomInfo != nil {
-			value, found := dicomInfo[ManufacturerModelName]
-			if found {
-				logger.Printf("Current Model Name is %s", value)
-				modelName = value
-			} else {
-				logger.Printf("unable to find Model name!")
-			}
-			//Since this is a CT Scan we can grab FOV
-			//ImagePositionPatient is the (X, Y, Z) cords
-			ImagePositionPatient := "(0020,0032)"
-			fovValue, fovFound := dicomInfo[ImagePositionPatient]
-			if fovFound {
-				//do the math to get the fov of the scan FOV = (X * 2) + (Z * 2)
-				//remove the brackets from the string
-				fovStr := strings.Trim(fovValue, "[]")
-				logger.Printf("fov values are currently %s", fovValue)
-				//parse the string by spaces and add it to a slice
-				fovSlice := strings.Split(fovStr, " ")
-				//set the slice to a type of int
-				var fovValues []int
-				//go thru each element in the slice and convert the string to a float then convert the float to an int and make sure the value is always positive
-				for _, valStr := range fovSlice {
-					floatValue, err := strconv.ParseFloat(valStr, 64)
-					if err != nil {
-						fmt.Printf("Error parsing value: %v\n", err)
-						return "error parsing into float", err
-					}
-					intValue := int(floatValue)
-					//if intValue is negative turn it positive
-					if intValue < 0 {
-						intValue = -intValue
-					}
-					fovValues = append(fovValues, intValue)
-				}
-				//grab fov values multiple times 2 and then divide by 10 to grab the first 2 digits, then convert it to a string.
-				xValue := strconv.Itoa((fovValues[0] * 2) / 10)
-				yValue := strconv.Itoa((fovValues[2] * 2) / 10)
-				//set fov string
-				fov = "+" + xValue + "X" + yValue
-				logger.Printf("Xvalue is currently:%s YValue is currently:%s", xValue, yValue)
-
-			} else {
-				logger.Printf("unable to find FOV!")
-			}
-
-		}
-	} else {
-		//grab a dicomfile from the list of available scan types
-		logger.Printf("selecting scan type %s to grab info", scanTypes[0])
-		//check to see if the scanType is present if so grab value
-		dicomPath, dicomExist := scanContent[scanTypes[0]]
-		if dicomExist {
-			logger.Printf("Searching %s at path %s", scanTypes[0], dicomPath)
-			dicomFiles, err := os.ReadDir(dicomPath)
-			if err != nil {
-				fmt.Println("Error reading the directory:", err)
-				return "error", err
-			}
-			//loop thru directory ignoring .DS_Store when it occurs and break out of loop once a dicomFile has been found.
-			for _, dicom := range dicomFiles {
-				if dicom.Name() != ".DS_Store" {
-					dicomFile = filepath.Join(dicomPath, dicom.Name())
-					break
-				}
-			}
-			logger.Printf("Checking %s", dicomFile)
-			dicomInfo, err := DicomInfoGrabber(dicomFile)
-			if err != nil {
-				logger.Printf("%s is not a valid dicom file", dicomFile)
-				return "Invalid dicom file", err
-			}
-			//if file provided is a valid dicom file grab the ManufactureModelName
-			if dicomInfo != nil {
-				value, found := dicomInfo[ManufacturerModelName]
-				if found {
-					logger.Printf("Current Model Name is %s", value)
-					modelName = value
-				}
-			}
-		} else {
-			logger.Printf("unable to locate DicomPath!!")
-		}
-
-	}
+	//create a string from all the slices of scans
+	Scans := strings.Join(ListOfScans, "+")
+	//construct the name
+	CompleteName = ManufactureModelName + "+" + Scans + Fov
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	//fmt.Printf("\nScan Info is \n%s\n", scanInfo)
-	//construct the Folder Name
-	listOfScans := strings.Join(scanTypes, "+")
-	folderName = modelName + "_" + listOfScans + fov
-	logger.Printf("folderName is %s", folderName)
-	fmt.Printf("Elapsed time: %.2f seconds for GetScanName on %s\n", elapsedTime.Seconds(), parentFolder)
-	return folderName, nil
+	logger.Printf("Complete name is %s", CompleteName)
+	logger.Printf("------- End of MakeScanName Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for MakeScanName\n", elapsedTime.Seconds())
+	return CompleteName, nil
 }
 
 // searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.If subfolders is a valid DicomFolderStructure add it to the []dicomFolder.
-// dicomFolder is a map with the key being the parent dir path and the value being the folder info
-// example:
-// /Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765:map[
-// CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.12000.1
-// PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.10632.1
-// PARENT_FOLDER:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765]
 func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
@@ -222,38 +85,30 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 		logger.Println("error getting list of folders:", err)
 		return nil, err
 	}
-	//check to see if the folders in the list are scans
 	dicomFolders := make(map[string]map[string]string)
+	//check to see if the folders in the list are scans
 	for _, folder := range folderList {
 		logger.Println("checking :", folder)
 		folderInfo, err := CheckDicomFolder(folder)
+		//if not a valid folder skip and check the next.
 		if err != nil {
-			logger.Println("error grabbing folderInfo", err)
+			logger.Println("error grabbing folderInfo when running CheckDicomFolder", err)
+			continue
 		}
-		//if folderinfo length is greater than 1 that means there is a scan
-		if len(folderInfo) >= 1 {
-			logger.Println(folder, "is a valid dicom folder.")
-			dicomFolders[folder] = folderInfo
-		}
+		logger.Println(folder, "is a valid dicom folder.")
+		dicomFolders[folder] = folderInfo
 	}
 	for key, value := range dicomFolders {
-		logger.Printf("folder info is %s\n%s\n\n", key, value)
+		logger.Printf("folder info is %s\n%s\n", key, value)
 	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	//fmt.Printf("\nScan Info is \n%s\n", scanInfo)
 	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders searching thru %s\n", elapsedTime.Seconds(), searchFolder)
 	return dicomFolders, nil
 }
 
-// takes a parent dicomFolderPath with subfolders and returns a map with the key PARENT_FOLDER and value PATH as well as key of Scan type and value of subfolder
-// example map[
-// ManufacturerModelName:[PreXion3D Explorer]
-// CT:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.25137155812096533.241906.2572.11
-// PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.25143587972146613.241906.5628.11
-// PARENT_FOLDER:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061
-// Scene:/Users/harrymbp/Developer/Projects/PreXion/temp/2313920.1194420868.1125777922.144317013718248927734763.2419061/2313920.1194420868.1125777922.206729801520575063.241906.824.11
-// ]
+// takes a parent dicomFolderPath that contains subfolders and returns a map with keys[manufacturerModelname,Scan type(PANO,CT,Scene,etc..),FOV(if applicable)] and values [Folder path,fov size, name of scanner]
+// example map[CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.8332.1 FOV:15X15 ManufacturerModelName:[PreXion3D Explorer] PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.11336.1]
 func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
@@ -312,6 +167,12 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 			}
 			break
 		}
+	}
+	if len(folderInfo) == 0 {
+		log := "no scans were found in:%s"
+		logger.Printf(log, dicomFolderPath)
+		return nil, fmt.Errorf(log, dicomFolderPath)
+
 	}
 	logger.Printf("folderInfo is :%s\n\n\n", folderInfo)
 	endTime := time.Now()
@@ -404,13 +265,19 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	dicomContents[scanType] = path
 	//if there is a CT scan grab the FOV Value
 	if scanType == "CT" {
-		dicomContents["FOV"] = "15x15XTest"
+		fovSize, err := GetFOVSize(dicomInfo, path)
+		if err != nil {
+			logger.Printf("%s is not a valid dicom file", dicomFilePath)
+			return nil, err
+		}
+		dicomContents["FOV"] = fovSize
 	}
 	logger.Printf("end of script content is\n%s\n", dicomContents)
 	return dicomContents, nil
 }
 
-func GetFOVSize(dicomInfo map[string]string) (string, error) {
+// takes dicomInfo and path string and calculates the FOV used and returns the string with the FOV size example "15X15"
+func GetFOVSize(dicomInfo map[string]string, path string) (string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
 	logFileName := "logs/GetFOVSize.txt"
@@ -421,15 +288,48 @@ func GetFOVSize(dicomInfo map[string]string) (string, error) {
 	}
 	defer logFile.Close()
 	//start of script
-	logger.Printf("Starting function GetFOVSize")
+	logger.Printf("Starting function GetFOVSize on \n%s\n", path)
 	//setting varible
-	// ImagePositionPatient := "(0020,0032)"
+	var fovString string
+	ImagePositionPatient := "(0020,0032)"
+	fovValue, fovFound := dicomInfo[ImagePositionPatient]
+	if fovFound {
+		//do the math to get the fov of the scan FOV = (X * 2) + (Z * 2)
+		//remove the brackets from the string
+		fovStr := strings.Trim(fovValue, "[]")
+		logger.Printf("fov values are currently %s", fovValue)
+		//parse the string by spaces and add it to a slice
+		fovSlice := strings.Split(fovStr, " ")
+		//set the slice to a type of int
+		var fovValues []int
+		//go thru each element in the slice and convert the string to a float then convert the float to an int and make sure the value is always positive
+		for _, valStr := range fovSlice {
+			floatValue, err := strconv.ParseFloat(valStr, 64)
+			if err != nil {
+				fmt.Printf("Error parsing value: %v\n", err)
+				return "error parsing into float", err
+			}
+			intValue := int(floatValue)
+			//if intValue is negative turn it positive
+			if intValue < 0 {
+				intValue = -intValue
+			}
+			fovValues = append(fovValues, intValue)
+		}
+		//grab fov values multiple times 2 and then divide by 10 to grab the first 2 digits, then convert it to a string.
+		xValue := strconv.Itoa((fovValues[0] * 2) / 10)
+		yValue := strconv.Itoa((fovValues[2] * 2) / 10)
+		//set fov string
+		fovString = xValue + "X" + yValue
+		logger.Printf("Xvalue is currently:%s YValue is currently:%s", xValue, yValue)
 
+	} else {
+		logger.Printf("unable to find FOV!")
+	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	//construct the Folder Name
 	fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
-	return "string", nil
+	return fovString, nil
 }
 
 // checks to see if the filepath provided is a dicom file if so return dicom info.
