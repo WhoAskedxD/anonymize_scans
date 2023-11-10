@@ -423,8 +423,6 @@ func GetFOVSize(dicomInfo map[string]string) (string, error) {
 	//start of script
 	logger.Printf("Starting function GetFOVSize")
 	//setting varible
-	//SOPUID
-	// ManufacturerModelName := "(0008,1090)"
 	// ImagePositionPatient := "(0020,0032)"
 
 	endTime := time.Now()
