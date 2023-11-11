@@ -13,6 +13,113 @@ import (
 	"github.com/suyashkumar/dicom"
 )
 
+// takes in a dicom parent folderpath and scandetails, generates a folder name using scandetails add the UID to the end of the name, and creates the folders for the dicoms according to scandetails
+func AnonymizeScan(parentFolderPath, outputFolderPath string, uid int, scanDetail map[string]string) (string, error) {
+	startTime := time.Now()
+	// creates a logger for log files.
+	logFileName := "logs/AnonymizeScan.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for AnonymizeScan:", err)
+		return "error", err
+	}
+	defer logFile.Close()
+	// start of script
+	logger.Printf("------- Start of AnonymizeScan Script ---------")
+	// main function starts here
+	logger.Printf("\nparentFolderPath :%s\noutputFolderPath :%s\nUID is %d\nScanDetail :%s\n", parentFolderPath, outputFolderPath, uid, scanDetail)
+	//generate new Parent folder name for scan
+	newParentFolderName, err := MakeScanName(scanDetail)
+	//converts the UID to a string and adds it to the end of the folder name.
+	newParentFolderName += "_" + strconv.Itoa(uid)
+	if err != nil {
+		fmt.Println("Error making log file for AnonymizeScan:", err)
+		return "error", err
+	}
+	logger.Printf("New parentfoldername is:%s", newParentFolderName)
+	//create parent folder with the new name
+	outputParentPath := filepath.Join(outputFolderPath, newParentFolderName)
+	logger.Printf("output parent folder path is %s", outputParentPath)
+	//make parentDir for scans using outputParentPath | os.ModePerm is a constant that gives the folder full read, write, and execute permissions
+	err = os.Mkdir(outputParentPath, os.ModePerm)
+	// Check for errors | if folder already exist it will error out
+	if err != nil {
+		fmt.Println("Error creating folder:", err)
+		return "Error creating folder:", err
+	}
+	logger.Printf("created Parent folder at:%s\n", outputParentPath)
+	// look thru scanDetails and create a folder each scan that exist
+	for scan, detail := range scanDetail {
+		//check if the scan detail is a type of scan (CT|PANO|CEPH|SCENE) or just details | if key is the following ignore it (FOV|ManufacturerModelName|)
+		logger.Printf("current key is:%s with detail as:%s", scan, detail)
+		switch scan {
+		case "ManufacturerModelName":
+			logger.Printf("found %s ignoring", scan)
+		case "FOV":
+			logger.Printf("found %s ignoring", scan)
+		default:
+			subfolderPath := filepath.Join(outputParentPath, scan)
+			logger.Printf("creating a folder for %s at %s", scan, subfolderPath)
+			err = os.Mkdir(subfolderPath, os.ModePerm)
+			// Check for errors | if folder already exist it will error out
+			if err != nil {
+				fmt.Println("Error creating folder:", err)
+				return "Error creating folder:", err
+			}
+			logger.Printf("created Subfolder %s for %s", subfolderPath, scan)
+		}
+	}
+	//test
+	// name := "/Users/harrymbp/Developer/Projects/PreXion/output/[PX3D Eclipse]+PANO_4"
+	// err = os.Mkdir(name, os.ModePerm)
+	// if err != nil {
+	// 	fmt.Println("Error creating folder:", err)
+	// }
+	// main function ends here
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	logger.Printf("------- End of AnonymizeScan Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
+	return newParentFolderName, nil
+}
+
+// takes in map[string]map[string]string generated from running GetDicomFolders and returns a map[string]string with the key being the folder path and the value being the scan name
+func GetScanNames(dicomFolders map[string]map[string]string) (map[string]string, error) {
+	startTime := time.Now()
+	// creates a logger for log files.
+	logFileName := "logs/GetScanNames.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for GetScanNames:", err)
+		return nil, err
+	}
+	defer logFile.Close()
+	// start of script
+	logger.Printf("------- Start of GetScanNames Script ---------")
+	// main function starts here
+	scanList := make(map[string]string)
+	for path, scanDetails := range dicomFolders {
+		name, err := MakeScanName(scanDetails)
+		if err != nil {
+			logger.Printf("unable to generate scan name for %s", path)
+			log.Fatal(err)
+		}
+		logger.Printf("current Path is: %s\nName for scan is: %s\n", path, name)
+		scanList[path] = name
+	}
+	if len(scanList) == 0 {
+		log := "unable to generate list of names"
+		logger.Printf(log)
+		return nil, fmt.Errorf(log)
+	}
+	// main function ends here
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	logger.Printf("------- End of GetScanNames Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for GetScanNames\n", elapsedTime.Seconds())
+	return scanList, nil
+}
+
 // takes in a map of scan details and constructs a string with the details
 func MakeScanName(scanDetails map[string]string) (string, error) {
 	startTime := time.Now()
@@ -56,6 +163,12 @@ func MakeScanName(scanDetails map[string]string) (string, error) {
 	}
 	//create a string from all the slices of scans
 	Scans := strings.Join(ListOfScans, "+")
+	//check if a name or scan type was assigned if not return an error
+	if ManufactureModelName == "" || Scans == "" {
+		log := "no Manufacture name or Scan type"
+		logger.Printf(log)
+		return log, fmt.Errorf(log)
+	}
 	//construct the name
 	CompleteName = ManufactureModelName + "+" + Scans + Fov
 	endTime := time.Now()
@@ -121,11 +234,13 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	}
 	defer logFile.Close()
 	//start of script
+	logger.Printf("------- Start of CheckDicomFolder Script ---------")
 	logger.Printf("checking to see if %s is a regular CT Scan or others", dicomFolderPath)
 	//grab the subfolders in the parent folder to check which sub folder is which type of scan
 	subFolderList, err := ListDirectories(dicomFolderPath)
 	if err != nil {
 		fmt.Println("Error getting subfolderList CheckDicomFolder:", err)
+		logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 		// return "Error making log file for CheckDicomFolder:", err
 		return nil, err
 	}
@@ -139,6 +254,7 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 		folderFiles, err := GetFilePathsInFolders(subFolder)
 		if err != nil {
 			logger.Println("error grabbing folderFiles", err)
+			logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 			return nil, err
 		}
 		//grab a file from the subfolder and check to see if file is a valid dicom file if so assign the value and break out of the loop
@@ -171,9 +287,11 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	if len(folderInfo) == 0 {
 		log := "no scans were found in:%s"
 		logger.Printf(log, dicomFolderPath)
+		logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 		return nil, fmt.Errorf(log, dicomFolderPath)
 
 	}
+	logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 	logger.Printf("folderInfo is :%s\n\n\n", folderInfo)
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
@@ -192,11 +310,13 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	}
 	defer logFile.Close()
 	//start of script
+	logger.Printf("------- Start of CheckScanType Script ---------")
 	logger.Printf("checking to see what type of scan %s is", dicomFilePath)
 	//check to see if file path given is a valid dicom
 	dicomInfo, err := DicomInfoGrabber(dicomFilePath)
 	if err != nil {
 		logger.Printf("%s is not a valid dicom file", dicomFilePath)
+		logger.Printf("------- End of CheckScanType Script ---------\n\n")
 		return nil, err
 	}
 	// Set default value for ScanType in the event 1 cannot be determined
@@ -256,7 +376,7 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 		}
 		//Look for ManufacturerModelName and add to dicomContents if available
 		modelName, foundModel := dicomInfo[ManufacturerModelName]
-		if foundModel {
+		if foundModel && modelName != "[AQNET]" {
 			logger.Printf("found Model name %s\n", modelName)
 			dicomContents["ManufacturerModelName"] = modelName
 		}
@@ -273,6 +393,7 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 		dicomContents["FOV"] = fovSize
 	}
 	logger.Printf("end of script content is\n%s\n", dicomContents)
+	logger.Printf("------- End of CheckScanType Script ---------\n\n")
 	return dicomContents, nil
 }
 
@@ -456,7 +577,7 @@ func GetFilePathsInFolders(directoryPath string) ([]string, error) {
 	return filePaths, nil
 }
 
-// Block of code for logger
+// //Block of code for logger
 // startTime := time.Now()
 // //creates a logger for log files.
 // logFileName := "logs/GetFOVSize.txt"
@@ -467,11 +588,11 @@ func GetFilePathsInFolders(directoryPath string) ([]string, error) {
 // }
 // defer logFile.Close()
 // //start of script
-// logger.Printf("Starting function GetFOVSize")
-// main function starts here
-// main function ends here
+// logger.Printf("------- Start of MakeScanName Script ---------")
+// //main function starts here
+// //main function ends here
 // endTime := time.Now()
 // elapsedTime := endTime.Sub(startTime)
-// //construct the Folder Name
+//logger.Printf("------- End of MakeScanName Script ---------\n\n")
 // fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
 // return "string", nil
