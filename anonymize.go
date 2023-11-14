@@ -2,6 +2,7 @@ package anonymize_scans
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"os"
@@ -11,30 +12,140 @@ import (
 	"time"
 
 	"github.com/suyashkumar/dicom"
+	"github.com/suyashkumar/dicom/pkg/tag"
 )
 
-// takes in a dicom parent folderpath and scandetails, generates a folder name using scandetails add the UID to the end of the name, and creates the folders for the dicoms according to scandetails
-func AnonymizeScan(parentFolderPath, outputFolderPath string, uid int, scanDetail map[string]string) (string, error) {
+// takes a filelist[]string and details, opens the dicom read and modify data then create new file at output location
+func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.Tag]string) error {
+	// Block of code for logger
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/AnonymizeScan.txt"
+	logFileName := "logs/MakeDicom.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
-		fmt.Println("Error making log file for AnonymizeScan:", err)
-		return "error", err
+		fmt.Println("Error making log file for MakeDicom:", err)
+		return err
 	}
 	defer logFile.Close()
 	// start of script
-	logger.Printf("------- Start of AnonymizeScan Script ---------")
+	logger.Printf("------- Start of MakeDicom Script ---------")
+	// main function starts here
+	logger.Printf("Output Folder path is:%s", outputPath)
+	//temp map with tags to be edited
+	for index, filePath := range fileList {
+		logger.Printf("opening %s", filePath)
+		currentDataset, err := dicom.ParseFile(filePath, nil)
+		//if file isnt a valid dicom file skip the proccess
+		if err != nil {
+			logger.Printf("error parsing:%s as a dicom fille copying file over instead\n", filePath)
+			err := copyFile(filePath, outputPath)
+			if err != nil {
+				logger.Printf("error copying file")
+			}
+			continue
+		}
+		// logger.Printf("found dataset %s", currentDataset)
+		for tag, value := range newDicomAttribute {
+			element, err := currentDataset.FindElementByTag(tag)
+			if err != nil {
+				log.Println("unable to locate ", tag, value)
+				continue
+			}
+			// log.Println("found tag ", element.Value.String())
+			newValue, _ := dicom.NewValue([]string{value}) //create a new dicom value with the interface of []string where value is the newDicomAttribute
+			// log.Println("new value is ", newValue.String())
+			element.Value = newValue // assign the current elements value to the newValue
+		}
+		//format the index so that it can make a file name 000_Index.dcm
+		name := fmt.Sprintf("%04d", index)
+		output_File := filepath.Join(outputPath, name+".dcm")
+		log.Println("dicom dataset modified creating new dicom file at  :", output_File)
+		//create a new file with the given output_file name and path
+		newDicomFile, err := os.Create(output_File)
+		if err != nil {
+			log.Println("error makign file!", err)
+			return err
+		}
+		//defer means to close up once the function createDicom finishes running
+		defer newDicomFile.Close()
+		//write to the file at newDicomFile with the data from currentDataset
+		dicom.Write(newDicomFile, currentDataset)
+		logger.Printf("Done Making dicom file:%s", output_File)
+	}
+	// main function ends here
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	logger.Printf("------- End of MakeDicom Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for MakeDicom\n", elapsedTime.Seconds())
+	return nil
+}
+
+// takes in dicomFolderPath map[string]string ([dicomfolder]outputFolder), newDicomAttribute map[tag.Tag]string| Open the file and modify it then save to output Path
+func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Tag]string) error {
+	// Block of code for logger
+	startTime := time.Now()
+	// creates a logger for log files.
+	logFileName := "logs/MakeDicomFolder.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for MakeDicomFolder:", err)
+		return err
+	}
+	defer logFile.Close()
+	// start of script
+	logger.Printf("------- Start of MakeDicomFolder Script ---------")
+	// main function starts here
+	for parentFolder, outputFolder := range folderInfo {
+		logger.Printf("current grabing dicoms from:%s\nmodifying and outputing at:%s\n", parentFolder, outputFolder)
+		//grab all the files from the parentFolder
+		folderList, err := GetFilePathsInFolders(parentFolder)
+		if err != nil {
+			log := "error getting file list in %s"
+			logger.Printf(log, parentFolder)
+			return fmt.Errorf(log, parentFolder)
+		}
+		logger.Printf("grabbing files from:%s", parentFolder)
+		//open each file from the folder list and make changes then save to output Path.
+		err = MakeDicom(folderList, outputFolder, newDicomAttribute)
+		if err != nil {
+			log := "error making dicoms from :%s"
+			logger.Printf(log, folderList)
+			return fmt.Errorf(log, folderList)
+		}
+		logger.Printf("done making dicoms..")
+	}
+	// main function ends here
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	logger.Printf("------- End of MakeDicomFolder Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for MakeDicomFolder\n", elapsedTime.Seconds())
+	return nil
+}
+
+// takes in dicomFolderPath, OutputFolderPath ,UID and scanDetails, then generates a []string with the output folderPaths.
+func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDetail map[string]string) (map[string]string, error) {
+	startTime := time.Now()
+	// creates a logger for log files.
+	logFileName := "logs/MakeOutputPath.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for MakeOutputPath:", err)
+		return nil, err
+	}
+	defer logFile.Close()
+	// start of script
+	logger.Printf("------- Start of MakeOutputPath Script ---------")
 	// main function starts here
 	logger.Printf("\nparentFolderPath :%s\noutputFolderPath :%s\nUID is %d\nScanDetail :%s\n", parentFolderPath, outputFolderPath, uid, scanDetail)
+	//Makes a map storing the original dicomFolder path as they key and the outputDicomFolder path as the value
+	outputPaths := make(map[string]string)
 	//generate new Parent folder name for scan
 	newParentFolderName, err := MakeScanName(scanDetail)
 	//converts the UID to a string and adds it to the end of the folder name.
 	newParentFolderName += "_" + strconv.Itoa(uid)
 	if err != nil {
-		fmt.Println("Error making log file for AnonymizeScan:", err)
-		return "error", err
+		fmt.Println("Error making log file for MakeOutputPath:", err)
+		return nil, err
 	}
 	logger.Printf("New parentfoldername is:%s", newParentFolderName)
 	//create parent folder with the new name
@@ -45,7 +156,7 @@ func AnonymizeScan(parentFolderPath, outputFolderPath string, uid int, scanDetai
 	// Check for errors | if folder already exist it will error out
 	if err != nil {
 		fmt.Println("Error creating folder:", err)
-		return "Error creating folder:", err
+		return nil, err
 	}
 	logger.Printf("created Parent folder at:%s\n", outputParentPath)
 	// look thru scanDetails and create a folder each scan that exist
@@ -59,15 +170,22 @@ func AnonymizeScan(parentFolderPath, outputFolderPath string, uid int, scanDetai
 			logger.Printf("found %s ignoring", scan)
 		default:
 			subfolderPath := filepath.Join(outputParentPath, scan)
+			outputPaths[detail] = subfolderPath
 			logger.Printf("creating a folder for %s at %s", scan, subfolderPath)
 			err = os.Mkdir(subfolderPath, os.ModePerm)
 			// Check for errors | if folder already exist it will error out
 			if err != nil {
 				fmt.Println("Error creating folder:", err)
-				return "Error creating folder:", err
+				return nil, err
 			}
 			logger.Printf("created Subfolder %s for %s", subfolderPath, scan)
 		}
+
+	}
+	if len(outputPaths) == 0 {
+		log := "there was an issue assigning a output folder to the dicom folder %s"
+		logger.Printf(log, scanDetail)
+		return nil, fmt.Errorf(log, scanDetail)
 	}
 	//test
 	// name := "/Users/harrymbp/Developer/Projects/PreXion/output/[PX3D Eclipse]+PANO_4"
@@ -78,9 +196,10 @@ func AnonymizeScan(parentFolderPath, outputFolderPath string, uid int, scanDetai
 	// main function ends here
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	logger.Printf("------- End of AnonymizeScan Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
-	return newParentFolderName, nil
+	logger.Printf("output paths generated are:%s\n", outputPaths)
+	logger.Printf("------- End of MakeOutputPath Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for MakeOutputPath\n", elapsedTime.Seconds())
+	return outputPaths, nil
 }
 
 // takes in map[string]map[string]string generated from running GetDicomFolders and returns a map[string]string with the key being the folder path and the value being the scan name
@@ -577,22 +696,60 @@ func GetFilePathsInFolders(directoryPath string) ([]string, error) {
 	return filePaths, nil
 }
 
-// //Block of code for logger
-// startTime := time.Now()
-// //creates a logger for log files.
-// logFileName := "logs/GetFOVSize.txt"
-// logger, logFile, err := createLogger(logFileName)
-// if err != nil {
-// 	fmt.Println("Error making log file for GETFOVSize:", err)
-// 	return "error", err
+// takes a file and output folder path then copies the files over.
+func copyFile(inputFile, outputPath string) error {
+	// Open the source file
+	sourceFile, err := os.Open(inputFile)
+	if err != nil {
+		fmt.Println("Error opening source file:", err)
+		return err
+	}
+	defer sourceFile.Close()
+	fileName := filepath.Base(inputFile)
+	//if file is .DS_Store ignore copying over the file.
+	if fileName == ".DS_Store" {
+		fmt.Printf("ignoring .DS_Store")
+		return nil
+	}
+	outputFile := filepath.Join(outputPath, fileName)
+	// Create or open the destination file
+	destinationFile, err := os.Create(outputFile)
+	if err != nil {
+		fmt.Println("Error creating destination file:", err)
+		return err
+	}
+	defer destinationFile.Close()
+
+	// Copy the content from the source to the destination
+	_, err = io.Copy(destinationFile, sourceFile)
+	if err != nil {
+		fmt.Println("Error copying file:", err)
+		return err
+	}
+
+	// fmt.Println("File copied successfully.")
+	return nil
+}
+
+// // takes in dicomFolderPath map[string]string ([dicomfolder]outputFolder), detailList | Open the file and modify it then save to output Path
+// func SampleFunction(dicomFolder, outputFolder string) (string, error) {
+// 	// Block of code for logger
+// 	startTime := time.Now()
+// 	// creates a logger for log files.
+// 	logFileName := "logs/SampleFunction.txt"
+// 	logger, logFile, err := createLogger(logFileName)
+// 	if err != nil {
+// 		fmt.Println("Error making log file for SampleFunction:", err)
+// 		return "error", err
+// 	}
+// 	defer logFile.Close()
+// 	// start of script
+// 	logger.Printf("------- Start of SampleFunction Script ---------")
+// 	// main function starts here
+// 	// main function ends here
+// 	endTime := time.Now()
+// 	elapsedTime := endTime.Sub(startTime)
+// 	logger.Printf("------- End of SampleFunction Script ---------\n\n")
+// 	fmt.Printf("Elapsed time: %.2f seconds for SampleFunction\n", elapsedTime.Seconds())
+// 	return "string", nil
 // }
-// defer logFile.Close()
-// //start of script
-// logger.Printf("------- Start of MakeScanName Script ---------")
-// //main function starts here
-// //main function ends here
-// endTime := time.Now()
-// elapsedTime := endTime.Sub(startTime)
-//logger.Printf("------- End of MakeScanName Script ---------\n\n")
-// fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
-// return "string", nil
