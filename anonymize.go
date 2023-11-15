@@ -33,7 +33,7 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 	logger.Printf("Output Folder path is:%s", outputPath)
 	//temp map with tags to be edited
 	for index, filePath := range fileList {
-		logger.Printf("opening %s", filePath)
+		// logger.Printf("opening %s", filePath)
 		currentDataset, err := dicom.ParseFile(filePath, nil)
 		//if file isnt a valid dicom file skip the proccess
 		if err != nil {
@@ -59,7 +59,7 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 		//format the index so that it can make a file name 000_Index.dcm
 		name := fmt.Sprintf("%04d", index)
 		output_File := filepath.Join(outputPath, name+".dcm")
-		log.Println("dicom dataset modified creating new dicom file at  :", output_File)
+		// log.Println("dicom dataset modified creating new dicom file at  :", output_File)
 		//create a new file with the given output_file name and path
 		newDicomFile, err := os.Create(output_File)
 		if err != nil {
@@ -70,11 +70,12 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 		defer newDicomFile.Close()
 		//write to the file at newDicomFile with the data from currentDataset
 		dicom.Write(newDicomFile, currentDataset)
-		logger.Printf("Done Making dicom file:%s", output_File)
+		// logger.Printf("Done Making dicom file:%s", output_File)
 	}
 	// main function ends here
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
+	logger.Printf("Elapsed time: %.2f seconds for %s\n", elapsedTime.Seconds(), outputPath)
 	logger.Printf("------- End of MakeDicom Script ---------\n\n")
 	fmt.Printf("Elapsed time: %.2f seconds for MakeDicom\n", elapsedTime.Seconds())
 	return nil
@@ -139,6 +140,8 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 	logger.Printf("\nparentFolderPath :%s\noutputFolderPath :%s\nUID is %d\nScanDetail :%s\n", parentFolderPath, outputFolderPath, uid, scanDetail)
 	//Makes a map storing the original dicomFolder path as they key and the outputDicomFolder path as the value
 	outputPaths := make(map[string]string)
+	//filter the scan details out
+	// scans, patientInfo, err := FilterScanDetails(scanDetails)
 	//generate new Parent folder name for scan
 	newParentFolderName, err := MakeScanName(scanDetail)
 	//converts the UID to a string and adds it to the end of the folder name.
@@ -167,6 +170,12 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 		case "ManufacturerModelName":
 			logger.Printf("found %s ignoring", scan)
 		case "FOV":
+			logger.Printf("found %s ignoring", scan)
+		case "PatientBirthDate":
+			logger.Printf("found %s ignoring", scan)
+		case "PatientID":
+			logger.Printf("found %s ignoring", scan)
+		case "PatientName":
 			logger.Printf("found %s ignoring", scan)
 		default:
 			subfolderPath := filepath.Join(outputParentPath, scan)
@@ -202,41 +211,94 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 	return outputPaths, nil
 }
 
-// takes in map[string]map[string]string generated from running GetDicomFolders and returns a map[string]string with the key being the folder path and the value being the scan name
-func GetScanNames(dicomFolders map[string]map[string]string) (map[string]string, error) {
+// // takes in a map of scan Details and filters scantypes and patient information
+// func FilterScanDetails(scanDetails map[string]string) (map[string]string, map[string]string, error) {
+// 	// Block of code for logger
+// 	startTime := time.Now()
+// 	// creates a logger for log files.
+// 	logFileName := "logs/FilterScanDetails.txt"
+// 	logger, logFile, err := createLogger(logFileName)
+// 	if err != nil {
+// 		fmt.Println("Error making log file for FilterScanDetails:", err)
+// 		return nil, nil, err
+// 	}
+// 	defer logFile.Close()
+// 	// start of script
+// 	logger.Printf("------- Start of FilterScanDetails Script ---------")
+// 	//initalize variables
+// 	scans := make(map[string]string)    //holds the key scan type (CT|PANO|CEPH|SCENE) | and value Path of scan
+// 	scanInfo := make(map[string]string) //holds the key Tag name | and value as the information
+// 	// main function starts here
+// 	for key, value := range scanDetails {
+// 		logger.Printf("current key is: %s and the value is: %s\n", key, value)
+// 		switch key {
+// 		case "PatientBirthDate":
+// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
+// 			scanInfo[key] = value
+// 		case "PatientID":
+// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
+// 			scanInfo[key] = value
+// 		case "PatientName":
+// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
+// 			scanInfo[key] = value
+// 		case "FOV":
+// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
+// 			scanInfo[key] = value
+// 		case "ManufacturerModelName":
+// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
+// 			scanInfo[key] = value
+// 		default:
+// 			logger.Printf("%s found adding %s to the scans", key, value)
+// 			scans[key] = value
+// 		}
+// 	}
+// 	// main function ends here
+// 	endTime := time.Now()
+// 	elapsedTime := endTime.Sub(startTime)
+// 	logger.Printf("Scan are :%s\nscanInfo is:%s\n", scans, scanInfo)
+// 	logger.Printf("------- End of FilterScanDetails Script ---------\n\n")
+// 	fmt.Printf("Elapsed time: %.2f seconds for FilterScanDetails\n", elapsedTime.Seconds())
+// 	return scans, scanInfo, nil
+// }
+
+// Takes in scanDetails and returns a list of scan types
+func GetScanList(scanDetails map[string]string) ([]string, error) {
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/GetScanNames.txt"
+	logFileName := "logs/GetScanList.txt"
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
-		fmt.Println("Error making log file for GetScanNames:", err)
+		fmt.Println("Error making log file for GetScanList:", err)
 		return nil, err
 	}
 	defer logFile.Close()
 	// start of script
-	logger.Printf("------- Start of GetScanNames Script ---------")
-	// main function starts here
-	scanList := make(map[string]string)
-	for path, scanDetails := range dicomFolders {
-		name, err := MakeScanName(scanDetails)
-		if err != nil {
-			logger.Printf("unable to generate scan name for %s", path)
-			log.Fatal(err)
+	logger.Printf("------- Start of GetScanList Script ---------")
+	//initalizing variables for the scan name
+	var ListOfScans []string
+	for key, value := range scanDetails {
+		logger.Printf("current key is: %s and the value is: %s\n", key, value)
+		switch key {
+		case "CT":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
+		case "PANO":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
+		case "CEPH":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
+		case "Scene":
+			logger.Printf("%s found adding %s to the Scans", key, value)
+			ListOfScans = append(ListOfScans, key)
 		}
-		logger.Printf("current Path is: %s\nName for scan is: %s\n", path, name)
-		scanList[path] = name
 	}
-	if len(scanList) == 0 {
-		log := "unable to generate list of names"
-		logger.Printf(log)
-		return nil, fmt.Errorf(log)
-	}
-	// main function ends here
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	logger.Printf("------- End of GetScanNames Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for GetScanNames\n", elapsedTime.Seconds())
-	return scanList, nil
+	logger.Printf("amount of scans are %d\nand the list is :%s", len(ListOfScans), ListOfScans)
+	logger.Printf("------- End of GetScanList Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for GetScanList\n", elapsedTime.Seconds())
+	return ListOfScans, nil
 }
 
 // takes in a map of scan details and constructs a string with the details
@@ -254,27 +316,19 @@ func MakeScanName(scanDetails map[string]string) (string, error) {
 	logger.Printf("------- Start of MakeScanName Script ---------")
 	//initalizing variables for the scan name
 	var ManufactureModelName string
-	var ListOfScans []string
+	//var ListOfScans []string
+	ListOfScans, err := GetScanList(scanDetails)
+	if err != nil {
+		log.Fatal(err)
+	}
 	var Fov string
 	var CompleteName string
 	for key, value := range scanDetails {
-		logger.Printf("current key is: %s\nand the value is: %s\n", key, value)
+		logger.Printf("current key is: %s and the value is: %s\n", key, value)
 		switch key {
 		case "ManufacturerModelName":
 			logger.Printf("%s found adding %s to the ManufacturerModelName", key, value)
 			ManufactureModelName = value
-		case "CT":
-			logger.Printf("%s found adding %s to the Scans", key, value)
-			ListOfScans = append(ListOfScans, key)
-		case "PANO":
-			logger.Printf("%s found adding %s to the Scans", key, value)
-			ListOfScans = append(ListOfScans, key)
-		case "CEPH":
-			logger.Printf("%s found adding %s to the Scans", key, value)
-			ListOfScans = append(ListOfScans, key)
-		case "Scene":
-			logger.Printf("%s found adding %s to the Scans", key, value)
-			ListOfScans = append(ListOfScans, key)
 		case "FOV":
 			logger.Printf("%s found adding %s to the Fov", key, value)
 			Fov = "+" + value
@@ -299,6 +353,9 @@ func MakeScanName(scanDetails map[string]string) (string, error) {
 }
 
 // searches the directory given(searchFolder) and checks if the subfolders are dicom scans or not.If subfolders is a valid DicomFolderStructure add it to the []dicomFolder.
+// example output [output paths]map[type of scan or scan detail]values
+// /Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687
+// map[CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.8332.1 FOV:15X15 ManufacturerModelName:[PreXion3D Explorer] PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.11336.1 PatientBirthDate:[20010101] PatientID:[02181963] PatientName:[Case^Number 8]]
 func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
@@ -408,17 +465,17 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 		logger.Printf(log, dicomFolderPath)
 		logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 		return nil, fmt.Errorf(log, dicomFolderPath)
-
 	}
-	logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 	logger.Printf("folderInfo is :%s\n\n\n", folderInfo)
+	logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	fmt.Printf("Elapsed time: %.2f seconds for CheckDicomFolder on %s\n", elapsedTime.Seconds(), dicomFolderPath)
 	return folderInfo, nil
 }
 
-// takes a dicomFile and checks to see what type of scan it is returns a string of either NA|CT|PANO|CEPH
+// takes a dicomFile and checks to see what type of scan it is returns map with the scan details.
+// example results -> map[ManufacturerModelName:[PreXion3D Explorer PRO] PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.10632.1 PatientBirthDate:[20000101] PatientID:[07301985jc] PatientName:[Case^Number 6]]
 func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	//creates a logger for log files.
 	logFileName := "logs/CheckScanType.txt"
@@ -448,6 +505,13 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	if dicomInfo != nil {
 		SOPClassUID := "(0008,0016)"
 		ManufacturerModelName := "(0008,1090)"
+		//patient info we need to extract.
+		PatientInfo := map[string]string{
+			"PatientName":      "(0010,0010)",
+			"PatientID":        "(0010,0020)",
+			"PatientBirthDate": "(0010,0030)",
+		}
+
 		//referrence
 		//"1.2.840.10008.5.1.4.1.1.7" [ Secondary Capture Image Storage ] - Possibly pano Need to check Image Type as well
 		//"1.2.840.10008.5.1.4.1.1.1.1" [ Digital X-Ray Image Storage - For Presentation ] - Ceph
@@ -498,6 +562,12 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 		if foundModel && modelName != "[AQNET]" {
 			logger.Printf("found Model name %s\n", modelName)
 			dicomContents["ManufacturerModelName"] = modelName
+		}
+		for tag, element := range PatientInfo {
+			value, found := dicomInfo[element]
+			if found {
+				dicomContents[tag] = value
+			}
 		}
 
 	}
