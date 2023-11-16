@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -211,55 +212,97 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 	return outputPaths, nil
 }
 
-// // takes in a map of scan Details and filters scantypes and patient information
-// func FilterScanDetails(scanDetails map[string]string) (map[string]string, map[string]string, error) {
-// 	// Block of code for logger
-// 	startTime := time.Now()
-// 	// creates a logger for log files.
-// 	logFileName := "logs/FilterScanDetails.txt"
-// 	logger, logFile, err := createLogger(logFileName)
-// 	if err != nil {
-// 		fmt.Println("Error making log file for FilterScanDetails:", err)
-// 		return nil, nil, err
-// 	}
-// 	defer logFile.Close()
-// 	// start of script
-// 	logger.Printf("------- Start of FilterScanDetails Script ---------")
-// 	//initalize variables
-// 	scans := make(map[string]string)    //holds the key scan type (CT|PANO|CEPH|SCENE) | and value Path of scan
-// 	scanInfo := make(map[string]string) //holds the key Tag name | and value as the information
-// 	// main function starts here
-// 	for key, value := range scanDetails {
-// 		logger.Printf("current key is: %s and the value is: %s\n", key, value)
-// 		switch key {
-// 		case "PatientBirthDate":
-// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
-// 			scanInfo[key] = value
-// 		case "PatientID":
-// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
-// 			scanInfo[key] = value
-// 		case "PatientName":
-// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
-// 			scanInfo[key] = value
-// 		case "FOV":
-// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
-// 			scanInfo[key] = value
-// 		case "ManufacturerModelName":
-// 			logger.Printf("%s found adding %s to the scanInfo", key, value)
-// 			scanInfo[key] = value
-// 		default:
-// 			logger.Printf("%s found adding %s to the scans", key, value)
-// 			scans[key] = value
-// 		}
-// 	}
-// 	// main function ends here
-// 	endTime := time.Now()
-// 	elapsedTime := endTime.Sub(startTime)
-// 	logger.Printf("Scan are :%s\nscanInfo is:%s\n", scans, scanInfo)
-// 	logger.Printf("------- End of FilterScanDetails Script ---------\n\n")
-// 	fmt.Printf("Elapsed time: %.2f seconds for FilterScanDetails\n", elapsedTime.Seconds())
-// 	return scans, scanInfo, nil
-// }
+// log which scan was modified and the new info for that scan
+func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]string) (string, error) {
+	// Block of code for logger
+	startTime := time.Now()
+	// creates a logger for log files.
+	logFileName := "logs/LogAnonymizedScan.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for LogAnonymizedScan:", err)
+		return "error", err
+	}
+	defer logFile.Close()
+	// start of script
+	logger.Printf("------- Start of LogAnonymizedScan Script ---------")
+	// main function starts here
+	logger.Printf("current scan info is %s\nnewScanInfo is %s\n", scanDetails, newScanInfo)
+	// main function ends here
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	logger.Printf("------- End of LogAnonymizedScan Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for LogAnonymizedScan\n", elapsedTime.Seconds())
+	return "string", nil
+}
+
+// takes in scanDetails and generates a new PatientName|PatientID|PatientDOB returns a map[tag.Tag]string
+func RandomizePatientInfo(scanDetails map[string]string) (map[tag.Tag]string, error) {
+	startTime := time.Now()
+	// creates a logger for log files.
+	logFileName := "logs/RandomizePatientInfo.txt"
+	logger, logFile, err := createLogger(logFileName)
+	if err != nil {
+		fmt.Println("Error making log file for RandomizePatientInfo:", err)
+		return nil, err
+	}
+	defer logFile.Close()
+	// start of script
+	logger.Printf("------- Start of RandomizePatientInfo Script ---------")
+	//make map to hold new randomized content
+	randomizedDicomAttributes := make(map[tag.Tag]string)
+	//make variables to store the results to construct the final name later
+	var newPatientName string
+	var newPatientID string
+	var newPatientBirthDate string
+	for key, value := range scanDetails {
+		logger.Printf("current key is: %s and the value is: %s\n", key, value)
+		switch key {
+		case "PatientName":
+			//take in patient id and modify it to have the following syntax ->Initals of name_list of scan or scan mode ->HV_CT+PANO+15x15
+			logger.Printf("%s found modifying the %s", key, value)
+			//Extract the first character
+			firstInital := value[1:2]
+			//Find the index of '^' and extract the character after it
+			indexOfCaret := strings.Index(value, "^")
+			lastInital := value[indexOfCaret+1 : indexOfCaret+2]
+			initals := firstInital + lastInital
+			//get a list of scans and
+			scans, err := MakeScanName(scanDetails)
+			if err != nil {
+				log.Fatal(err)
+				return nil, err
+			}
+			logger.Printf("Initals are %s and scans are %s", initals, scans)
+			newPatientName = initals + "^" + scans
+			logger.Printf("newPatientName is %s", newPatientName)
+		case "PatientID":
+			logger.Printf("%s found modifying the %s", key, value)
+			currentTime := time.Now().Unix()
+			//generate random Number
+			randomNumber := rand.Intn(10000-1) + int(currentTime)
+			newPatientID = strconv.Itoa(randomNumber)
+			logger.Printf("newPatientId is %s", newPatientID)
+		case "PatientBirthDate":
+			logger.Printf("%s found modifying the %s", key, value)
+			//keep the current year and set month and day to 1230 december 30th
+			year := value[1:5]
+			newPatientBirthDate = year + "1230"
+			logger.Printf("newPatientBirthDate is %s", newPatientBirthDate)
+		}
+	}
+	//construct the map and return it
+	randomizedDicomAttributes[tag.PatientName] = newPatientName
+	randomizedDicomAttributes[tag.PatientID] = newPatientID
+	randomizedDicomAttributes[tag.PatientBirthDate] = newPatientBirthDate
+
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	logger.Printf("newPatientName is:%s newPatientID is:%s newPatientBirthDate is:%s", newPatientName, newPatientID, newPatientBirthDate)
+	logger.Printf("------- End of RandomizePatientInfo Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for RandomizePatientInfo\n", elapsedTime.Seconds())
+	return randomizedDicomAttributes, nil
+}
 
 // Takes in scanDetails and returns a list of scan types
 func GetScanList(scanDetails map[string]string) ([]string, error) {
@@ -316,13 +359,13 @@ func MakeScanName(scanDetails map[string]string) (string, error) {
 	logger.Printf("------- Start of MakeScanName Script ---------")
 	//initalizing variables for the scan name
 	var ManufactureModelName string
-	//var ListOfScans []string
+	var Fov string
+	var CompleteName string
+	//grab a []string of scans and add them together.
 	ListOfScans, err := GetScanList(scanDetails)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var Fov string
-	var CompleteName string
 	for key, value := range scanDetails {
 		logger.Printf("current key is: %s and the value is: %s\n", key, value)
 		switch key {
