@@ -1,6 +1,7 @@
 package anonymize_scans
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -212,8 +213,8 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 	return outputPaths, nil
 }
 
-// log which scan was modified and the new info for that scan
-func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]string) (string, error) {
+// log which scan was modified and the new info for that scan| Keep track of the orginal Patient|ID|
+func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]string) (map[string]string, error) {
 	// Block of code for logger
 	startTime := time.Now()
 	// creates a logger for log files.
@@ -221,19 +222,49 @@ func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]st
 	logger, logFile, err := createLogger(logFileName)
 	if err != nil {
 		fmt.Println("Error making log file for LogAnonymizedScan:", err)
-		return "error", err
+		return nil, err
 	}
 	defer logFile.Close()
 	// start of script
 	logger.Printf("------- Start of LogAnonymizedScan Script ---------")
 	// main function starts here
 	logger.Printf("current scan info is %s\nnewScanInfo is %s\n", scanDetails, newScanInfo)
+	//create a map to store the results
+	// should contain LOCATION:Folderpath and Original Patient ID:New Patient ID
+	loggedInfo := make(map[string]string)
+	//list of scans to check
+	scans := []string{"CT", "PANO", "SCENE", "CEPH"}
+	//loop thru scan info to find a scan and grab the parent directory of the scan| loop only needs to run once until a valid scan is found then it can break
+	for currentScanType, currentScanDetails := range scanDetails {
+		logger.Printf("Current ScanType is %s\nValue is %s", currentScanType, currentScanDetails)
+		matchFound := false
+		//if a scan type is found grab the folderPath | original PatientID | newPatientID and assign them to loggedInfo
+		for _, match := range scans {
+			if currentScanType == match {
+				folderPath := filepath.Dir(currentScanDetails) //grab the folder path for the scan
+				//value assignments
+				loggedInfo["LOCATION"] = folderPath
+				loggedInfo["ORGINIALPATIENTID"] = scanDetails["PatientID"]
+				loggedInfo["NEWPATIENTID"] = newScanInfo[tag.PatientID]
+				matchFound = true
+
+			}
+		}
+		if matchFound {
+			logger.Printf("LOCATION is: %s and ORGINIALPATIENTID is:%s, NEWPATIENTID is:%s", loggedInfo["LOCATION"], loggedInfo["ORGINIALPATIENTID"], loggedInfo["NEWPATIENTID"])
+			break
+		}
+	}
+	if len(loggedInfo) <= 0 {
+		err = errors.New("unable to locate any scans and grab any info")
+		return nil, err
+	}
 	// main function ends here
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("------- End of LogAnonymizedScan Script ---------\n\n")
 	fmt.Printf("Elapsed time: %.2f seconds for LogAnonymizedScan\n", elapsedTime.Seconds())
-	return "string", nil
+	return loggedInfo, nil
 }
 
 // takes in scanDetails and generates a new PatientName|PatientID|PatientDOB returns a map[tag.Tag]string
@@ -331,7 +362,7 @@ func GetScanList(scanDetails map[string]string) ([]string, error) {
 		case "CEPH":
 			logger.Printf("%s found adding %s to the Scans", key, value)
 			ListOfScans = append(ListOfScans, key)
-		case "Scene":
+		case "SCENE":
 			logger.Printf("%s found adding %s to the Scans", key, value)
 			ListOfScans = append(ListOfScans, key)
 		}
@@ -439,7 +470,7 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 	return dicomFolders, nil
 }
 
-// takes a parent dicomFolderPath that contains subfolders and returns a map with keys[manufacturerModelname,Scan type(PANO,CT,Scene,etc..),FOV(if applicable)] and values [Folder path,fov size, name of scanner]
+// takes a parent dicomFolderPath that contains subfolders and returns a map with keys[manufacturerModelname,Scan type(PANO,CT,SCENE,etc..),FOV(if applicable)] and values [Folder path,fov size, name of scanner]
 // example map[CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.8332.1 FOV:15X15 ManufacturerModelName:[PreXion3D Explorer] PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.11336.1]
 func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	startTime := time.Now()
@@ -565,13 +596,13 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 			logger.Printf("path is %s\n", path)
 			switch value {
 			case "[1.2.840.10008.5.1.4.1.1.7]":
-				logger.Printf("SOPClassUID is: %s, Possibly Pano or Saved Scene", value)
+				logger.Printf("SOPClassUID is: %s, Possibly Pano or Saved SCENE", value)
 				ImageType := "(0008,0008)"
 				//ImageType := "(0008,0008)"
 				//referrence
 				//"[ORIGINAL PRIMARY AXIAL]" - Regular CT Scan
 				//"[ORIGINAL PRIMARY ]" - Pano or Ceph Scans.
-				//"[DERIVED SECONDARY TERARECON]" - Saved Scene.
+				//"[DERIVED SECONDARY TERARECON]" - Saved SCENE.
 				image, found := dicomInfo[ImageType]
 				if found {
 					switch image {
@@ -581,8 +612,8 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 					case "[ORIGINAL SECONDARY SINGLEPLANE]": //pano from eclipse
 						logger.Printf("Scan is a %s %s", scanType, image)
 						scanType = "PANO"
-					case "[DERIVED SECONDARY TERARECON]": //scene
-						scanType = "Scene"
+					case "[DERIVED SECONDARY TERARECON]": //SCENE
+						scanType = "SCENE"
 						logger.Printf("Scan is a %s %s", scanType, image)
 					default:
 						logger.Printf("Scan mode not found. ImageType is :%s", image)
