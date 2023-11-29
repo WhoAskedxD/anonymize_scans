@@ -33,7 +33,8 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 	logger.Printf("------- Start of MakeDicom Script ---------")
 	// main function starts here
 	logger.Printf("Output Folder path is:%s", outputPath)
-	//temp map with tags to be edited
+	//Grabbing the SeriesInstanceUID to add an index at the end for both MediaStorageSOPInstanceUID|SOPInstanceUID
+
 	for index, filePath := range fileList {
 		// logger.Printf("opening %s", filePath)
 		currentDataset, err := dicom.ParseFile(filePath, nil)
@@ -47,6 +48,9 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 			continue
 		}
 		// logger.Printf("found dataset %s", currentDataset)
+		// grab SeriesInstanceUID from newDicomAttribute and add the index of the loop to the end to generate a new MediaStorageSOPInstanceUID|SOPInstanceUID
+		newDicomAttribute[tag.MediaStorageSOPInstanceUID] = newDicomAttribute[tag.SeriesInstanceUID] + "." + strconv.Itoa(index+1)
+		newDicomAttribute[tag.SOPInstanceUID] = newDicomAttribute[tag.MediaStorageSOPInstanceUID]
 		for tag, value := range newDicomAttribute {
 			element, err := currentDataset.FindElementByTag(tag)
 			if err != nil {
@@ -79,7 +83,7 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("Elapsed time: %.2f seconds for %s\n", elapsedTime.Seconds(), outputPath)
 	logger.Printf("------- End of MakeDicom Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for MakeDicom\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for MakeDicom\n", elapsedTime.Seconds())
 	return nil
 }
 
@@ -87,6 +91,7 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Tag]string) error {
 	// Block of code for logger
 	startTime := time.Now()
+
 	// creates a logger for log files.
 	logFileName := "logs/MakeDicomFolder.txt"
 	logger, logFile, err := createLogger(logFileName)
@@ -98,7 +103,23 @@ func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Ta
 	// start of script
 	logger.Printf("------- Start of MakeDicomFolder Script ---------")
 	// main function starts here
+	//generate timestamp for the StudyUID
+	unformattedDate := startTime.Format("20061230")                                //this format generated 3 extra characters for some reason we need to clean it up and remove the last 3
+	date := unformattedDate[:len(unformattedDate)-3]                               //removes the last 3 characters
+	hour, min, sec := startTime.Clock()                                            //grabs the hour min and seconds as Ints
+	timestamp := date + strconv.Itoa(hour) + strconv.Itoa(min) + strconv.Itoa(sec) //constructs the timestamp to be used as a studyuid
+	logger.Printf("current timestamp is  %v", timestamp)
+	//grab and set new StudyUID here StudyUID will stay the same for the parent folder
+	newStudyInstanceUID := newDicomAttribute[tag.StudyInstanceUID] + "." + timestamp
+	logger.Printf("current StudyInstanceUID is:%s\nnewStudyInstanceUID:%s", newDicomAttribute[tag.StudyInstanceUID], newStudyInstanceUID)
+	//assign the new value to the actual StudyInstanceUID
+	newDicomAttribute[tag.StudyInstanceUID] = newStudyInstanceUID
 	for parentFolder, outputFolder := range folderInfo {
+		//grab the StudyInstanceUID generate 5 digit random number and add it onto the end for the series instance UID| new Series generated each loop
+		//setting the randomNumber for this Series
+		randomNumber := rand.Intn(10000 - 1)
+		//grabbing the SeriesInstanceUID and adding the randomgenerated number to the end of it.
+		newDicomAttribute[tag.SeriesInstanceUID] = newDicomAttribute[tag.StudyInstanceUID] + "." + strconv.Itoa(randomNumber)
 		logger.Printf("current grabing dicoms from:%s\nmodifying and outputing at:%s\n", parentFolder, outputFolder)
 		//grab all the files from the parentFolder
 		folderList, err := GetFilePathsInFolders(parentFolder)
@@ -121,7 +142,7 @@ func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Ta
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("------- End of MakeDicomFolder Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for MakeDicomFolder\n", elapsedTime.Seconds())
+	fmt.Printf("Elapsed time: %.2f seconds for MakeDicomFolders\n", elapsedTime.Seconds())
 	return nil
 }
 
@@ -209,7 +230,7 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("output paths generated are:%s\n", outputPaths)
 	logger.Printf("------- End of MakeOutputPath Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for MakeOutputPath\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for MakeOutputPath\n", elapsedTime.Seconds())
 	return outputPaths, nil
 }
 
@@ -236,11 +257,11 @@ func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]st
 	scans := []string{"CT", "PANO", "SCENE", "CEPH"}
 	//loop thru scan info to find a scan and grab the parent directory of the scan| loop only needs to run once until a valid scan is found then it can break
 	for currentScanType, currentScanDetails := range scanDetails {
-		logger.Printf("Current ScanType is %s\nValue is %s", currentScanType, currentScanDetails)
 		matchFound := false
 		//if a scan type is found grab the folderPath | original PatientID | newPatientID and assign them to loggedInfo
 		for _, match := range scans {
 			if currentScanType == match {
+				logger.Printf("Current ScanType is %s\nValue is %s", currentScanType, currentScanDetails)
 				folderPath := filepath.Dir(currentScanDetails) //grab the folder path for the scan
 				//value assignments
 				loggedInfo["LOCATION"] = folderPath
@@ -256,14 +277,16 @@ func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]st
 		}
 	}
 	if len(loggedInfo) <= 0 {
-		err = errors.New("unable to locate any scans and grab any info")
+		logError := ("unable to locate any scans and grab any info")
+		logger.Printf(logError)
+		err = errors.New(logError)
 		return nil, err
 	}
 	// main function ends here
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("------- End of LogAnonymizedScan Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for LogAnonymizedScan\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for LogAnonymizedScan\n", elapsedTime.Seconds())
 	return loggedInfo, nil
 }
 
@@ -307,6 +330,8 @@ func RandomizePatientInfo(scanDetails map[string]string) (map[tag.Tag]string, er
 			logger.Printf("Initals are %s and scans are %s", initals, scans)
 			newPatientName = initals + "^" + scans
 			logger.Printf("newPatientName is %s", newPatientName)
+			randomizedDicomAttributes[tag.PatientName] = newPatientName
+
 		case "PatientID":
 			logger.Printf("%s found modifying the %s", key, value)
 			currentTime := time.Now().Unix()
@@ -314,24 +339,29 @@ func RandomizePatientInfo(scanDetails map[string]string) (map[tag.Tag]string, er
 			randomNumber := rand.Intn(10000-1) + int(currentTime)
 			newPatientID = strconv.Itoa(randomNumber)
 			logger.Printf("newPatientId is %s", newPatientID)
+			randomizedDicomAttributes[tag.PatientID] = newPatientID
+
 		case "PatientBirthDate":
 			logger.Printf("%s found modifying the %s", key, value)
 			//keep the current year and set month and day to 1230 december 30th
-			year := value[1:5]
-			newPatientBirthDate = year + "1230"
-			logger.Printf("newPatientBirthDate is %s", newPatientBirthDate)
+			//check if there is a dob by checking the length of value if there is no dob the default value is "[]" which is 2 characters.
+			if len(value) <= 2 {
+				logger.Printf("no DOB found ignoring DOB")
+			} else {
+				year := value[1:5]
+				newPatientBirthDate = year + "1230"
+				randomizedDicomAttributes[tag.PatientBirthDate] = newPatientBirthDate
+				logger.Printf("newPatientBirthDate is %s", newPatientBirthDate)
+			}
 		}
 	}
 	//construct the map and return it
-	randomizedDicomAttributes[tag.PatientName] = newPatientName
-	randomizedDicomAttributes[tag.PatientID] = newPatientID
-	randomizedDicomAttributes[tag.PatientBirthDate] = newPatientBirthDate
 
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("newPatientName is:%s newPatientID is:%s newPatientBirthDate is:%s", newPatientName, newPatientID, newPatientBirthDate)
 	logger.Printf("------- End of RandomizePatientInfo Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for RandomizePatientInfo\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for RandomizePatientInfo\n", elapsedTime.Seconds())
 	return randomizedDicomAttributes, nil
 }
 
@@ -371,7 +401,7 @@ func GetScanList(scanDetails map[string]string) ([]string, error) {
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("amount of scans are %d\nand the list is :%s", len(ListOfScans), ListOfScans)
 	logger.Printf("------- End of GetScanList Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for GetScanList\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for GetScanList\n", elapsedTime.Seconds())
 	return ListOfScans, nil
 }
 
@@ -422,7 +452,7 @@ func MakeScanName(scanDetails map[string]string) (string, error) {
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("Complete name is %s", CompleteName)
 	logger.Printf("------- End of MakeScanName Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for MakeScanName\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for MakeScanName\n", elapsedTime.Seconds())
 	return CompleteName, nil
 }
 
@@ -466,7 +496,7 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	fmt.Printf("Elapsed time: %.2f seconds for GetDicomFolders searching thru %s\n", elapsedTime.Seconds(), searchFolder)
+	logger.Printf("Elapsed time: %.2f seconds for GetDicomFolders searching thru %s\n", elapsedTime.Seconds(), searchFolder)
 	return dicomFolders, nil
 }
 
@@ -544,7 +574,7 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	fmt.Printf("Elapsed time: %.2f seconds for CheckDicomFolder on %s\n", elapsedTime.Seconds(), dicomFolderPath)
+	logger.Printf("Elapsed time: %.2f seconds for CheckDicomFolder on %s\n", elapsedTime.Seconds(), dicomFolderPath)
 	return folderInfo, nil
 }
 
@@ -712,7 +742,7 @@ func GetFOVSize(dicomInfo map[string]string, path string) (string, error) {
 	}
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	fmt.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for GetFOVSize\n", elapsedTime.Seconds())
 	return fovString, nil
 }
 
