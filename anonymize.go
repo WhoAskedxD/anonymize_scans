@@ -110,16 +110,17 @@ func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Ta
 	timestamp := date + strconv.Itoa(hour) + strconv.Itoa(min) + strconv.Itoa(sec) //constructs the timestamp to be used as a studyuid
 	logger.Printf("current timestamp is  %v", timestamp)
 	//grab and set new StudyUID here StudyUID will stay the same for the parent folder
-	newStudyInstanceUID := newDicomAttribute[tag.StudyInstanceUID] + "." + timestamp
+	randomStudyNumber := rand.Intn(10000 - 1)
+	newStudyInstanceUID := newDicomAttribute[tag.StudyInstanceUID] + "." + timestamp + strconv.Itoa(randomStudyNumber)
 	logger.Printf("current StudyInstanceUID is:%s\nnewStudyInstanceUID:%s", newDicomAttribute[tag.StudyInstanceUID], newStudyInstanceUID)
 	//assign the new value to the actual StudyInstanceUID
 	newDicomAttribute[tag.StudyInstanceUID] = newStudyInstanceUID
 	for parentFolder, outputFolder := range folderInfo {
 		//grab the StudyInstanceUID generate 5 digit random number and add it onto the end for the series instance UID| new Series generated each loop
 		//setting the randomNumber for this Series
-		randomNumber := rand.Intn(10000 - 1)
+		randomSeriesNumber := rand.Intn(10000 - 1)
 		//grabbing the SeriesInstanceUID and adding the randomgenerated number to the end of it.
-		newDicomAttribute[tag.SeriesInstanceUID] = newDicomAttribute[tag.StudyInstanceUID] + "." + strconv.Itoa(randomNumber)
+		newDicomAttribute[tag.SeriesInstanceUID] = newDicomAttribute[tag.StudyInstanceUID] + "." + strconv.Itoa(randomSeriesNumber)
 		logger.Printf("current grabing dicoms from:%s\nmodifying and outputing at:%s\n", parentFolder, outputFolder)
 		//grab all the files from the parentFolder
 		folderList, err := GetFilePathsInFolders(parentFolder)
@@ -360,8 +361,8 @@ func RandomizePatientInfo(scanDetails map[string]string) (map[tag.Tag]string, er
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("newPatientName is:%s newPatientID is:%s newPatientBirthDate is:%s", newPatientName, newPatientID, newPatientBirthDate)
-	logger.Printf("------- End of RandomizePatientInfo Script ---------\n\n")
-	logger.Printf("Elapsed time: %.2f seconds for RandomizePatientInfo\n", elapsedTime.Seconds())
+	logger.Printf("------- End of RandomizePatientInfo Script ---------\n")
+	logger.Printf("Elapsed time: %.2f seconds for RandomizePatientInfo\n\n", elapsedTime.Seconds())
 	return randomizedDicomAttributes, nil
 }
 
@@ -882,7 +883,7 @@ func copyFile(inputFile, outputPath string) error {
 	fileName := filepath.Base(inputFile)
 	//if file is .DS_Store ignore copying over the file.
 	if fileName == ".DS_Store" {
-		fmt.Printf("ignoring .DS_Store")
+		// fmt.Printf("ignoring .DS_Store")
 		return nil
 	}
 	outputFile := filepath.Join(outputPath, fileName)
