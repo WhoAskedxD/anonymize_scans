@@ -18,23 +18,28 @@ import (
 )
 
 // takes a filelist[]string and details, opens the dicom read and modify data then create new file at output location
-func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.Tag]string) error {
+func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.Tag]string, enableLogging bool) error {
 	// Block of code for logger
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/MakeDicom.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for MakeDicom:", err)
-		return err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/MakeDicom.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for MakeDicom:", err)
+			return err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	// start of script
 	logger.Printf("------- Start of MakeDicom Script ---------")
 	// main function starts here
 	logger.Printf("Output Folder path is:%s", outputPath)
 	//Grabbing the SeriesInstanceUID to add an index at the end for both MediaStorageSOPInstanceUID|SOPInstanceUID
-
 	for index, filePath := range fileList {
 		// logger.Printf("opening %s", filePath)
 		currentDataset, err := dicom.ParseFile(filePath, nil)
@@ -88,20 +93,25 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 }
 
 // takes in dicomFolderPath map[string]string ([dicomfolder]outputFolder), newDicomAttribute map[tag.Tag]string| Open the file and modify it then save to output Path
-func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Tag]string) error {
+func MakeStudyFolder(folderInfo map[string]string, newDicomAttribute map[tag.Tag]string, enableLogging bool) error {
 	// Block of code for logger
 	startTime := time.Now()
-
 	// creates a logger for log files.
-	logFileName := "logs/MakeDicomFolder.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for MakeDicomFolder:", err)
-		return err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/MakeStudyFolder.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for MakeStudyFolder:", err)
+			return err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	// start of script
-	logger.Printf("------- Start of MakeDicomFolder Script ---------")
+	logger.Printf("------- Start of MakeStudyFolder Script ---------")
 	// main function starts here
 	//generate timestamp for the StudyUID
 	unformattedDate := startTime.Format("20061230")                                //this format generated 3 extra characters for some reason we need to clean it up and remove the last 3
@@ -123,7 +133,7 @@ func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Ta
 		newDicomAttribute[tag.SeriesInstanceUID] = newDicomAttribute[tag.StudyInstanceUID] + "." + strconv.Itoa(randomSeriesNumber)
 		logger.Printf("current grabing dicoms from:%s\nmodifying and outputing at:%s\n", parentFolder, outputFolder)
 		//grab all the files from the parentFolder
-		folderList, err := GetFilePathsInFolders(parentFolder)
+		folderList, err := GetFilePathsInFolders(parentFolder, enableLogging)
 		if err != nil {
 			log := "error getting file list in %s"
 			logger.Printf(log, parentFolder)
@@ -131,7 +141,7 @@ func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Ta
 		}
 		logger.Printf("grabbing files from:%s", parentFolder)
 		//open each file from the folder list and make changes then save to output Path.
-		err = MakeDicom(folderList, outputFolder, newDicomAttribute)
+		err = MakeDicom(folderList, outputFolder, newDicomAttribute, enableLogging)
 		if err != nil {
 			log := "error making dicoms from :%s"
 			logger.Printf(log, folderList)
@@ -142,22 +152,28 @@ func MakeDicomFolders(folderInfo map[string]string, newDicomAttribute map[tag.Ta
 	// main function ends here
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
-	logger.Printf("------- End of MakeDicomFolder Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for MakeDicomFolders\n", elapsedTime.Seconds())
+	logger.Printf("------- End of MakeStudyFolder Script ---------\n\n")
+	fmt.Printf("Elapsed time: %.2f seconds for MakeStudyFolder\n", elapsedTime.Seconds())
 	return nil
 }
 
 // takes in dicomFolderPath, OutputFolderPath ,UID and scanDetails, then generates a []string with the output folderPaths.
-func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDetail map[string]string) (map[string]string, error) {
+func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDetail map[string]string, enableLogging bool) (map[string]string, error) {
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/MakeOutputPath.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for MakeOutputPath:", err)
-		return nil, err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/MakeOutputPath.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for MakeOutputPath:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	// start of script
 	logger.Printf("------- Start of MakeOutputPath Script ---------")
 	// main function starts here
@@ -167,7 +183,7 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 	//filter the scan details out
 	// scans, patientInfo, err := FilterScanDetails(scanDetails)
 	//generate new Parent folder name for scan
-	newParentFolderName, err := MakeScanName(scanDetail)
+	newParentFolderName, err := MakeScanName(scanDetail, enableLogging)
 	//converts the UID to a string and adds it to the end of the folder name.
 	newParentFolderName += "_" + strconv.Itoa(uid)
 	if err != nil {
@@ -191,15 +207,7 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 		//check if the scan detail is a type of scan (CT|PANO|CEPH|SCENE) or just details | if key is the following ignore it (FOV|ManufacturerModelName|)
 		logger.Printf("current key is:%s with detail as:%s", scan, detail)
 		switch scan {
-		case "ManufacturerModelName":
-			logger.Printf("found %s ignoring", scan)
-		case "FOV":
-			logger.Printf("found %s ignoring", scan)
-		case "PatientBirthDate":
-			logger.Printf("found %s ignoring", scan)
-		case "PatientID":
-			logger.Printf("found %s ignoring", scan)
-		case "PatientName":
+		case "ManufacturerModelName", "FOV", "PatientBirthDate", "PatientID", "PatientName":
 			logger.Printf("found %s ignoring", scan)
 		default:
 			subfolderPath := filepath.Join(outputParentPath, scan)
@@ -220,12 +228,6 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 		logger.Printf(log, scanDetail)
 		return nil, fmt.Errorf(log, scanDetail)
 	}
-	//test
-	// name := "/Users/harrymbp/Developer/Projects/PreXion/output/[PX3D Eclipse]+PANO_4"
-	// err = os.Mkdir(name, os.ModePerm)
-	// if err != nil {
-	// 	fmt.Println("Error creating folder:", err)
-	// }
 	// main function ends here
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
@@ -236,17 +238,23 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 }
 
 // log which scan was modified and the new info for that scan| Keep track of the orginal Patient|ID|
-func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]string) (map[string]string, error) {
+func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]string, enableLogging bool) (map[string]string, error) {
 	// Block of code for logger
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/LogAnonymizedScan.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for LogAnonymizedScan:", err)
-		return nil, err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/LogAnonymizedScan.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for LogAnonymizedScan:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	// start of script
 	logger.Printf("------- Start of LogAnonymizedScan Script ---------")
 	// main function starts here
@@ -280,7 +288,7 @@ func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]st
 	if len(loggedInfo) <= 0 {
 		logError := ("unable to locate any scans and grab any info")
 		logger.Printf(logError)
-		err = errors.New(logError)
+		err := errors.New(logError)
 		return nil, err
 	}
 	// main function ends here
@@ -292,16 +300,22 @@ func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]st
 }
 
 // takes in scanDetails and generates a new PatientName|PatientID|PatientDOB returns a map[tag.Tag]string
-func RandomizePatientInfo(scanDetails map[string]string) (map[tag.Tag]string, error) {
+func RandomizePatientInfo(scanDetails map[string]string, enableLogging bool) (map[tag.Tag]string, error) {
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/RandomizePatientInfo.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for RandomizePatientInfo:", err)
-		return nil, err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/RandomizePatientInfo.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for RandomizePatientInfo:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	// start of script
 	logger.Printf("------- Start of RandomizePatientInfo Script ---------")
 	//make map to hold new randomized content
@@ -323,7 +337,7 @@ func RandomizePatientInfo(scanDetails map[string]string) (map[tag.Tag]string, er
 			lastInital := value[indexOfCaret+1 : indexOfCaret+2]
 			initals := firstInital + lastInital
 			//get a list of scans and
-			scans, err := MakeScanName(scanDetails)
+			scans, err := MakeScanName(scanDetails, enableLogging)
 			if err != nil {
 				log.Fatal(err)
 				return nil, err
@@ -367,16 +381,22 @@ func RandomizePatientInfo(scanDetails map[string]string) (map[tag.Tag]string, er
 }
 
 // Takes in scanDetails and returns a list of scan types
-func GetScanList(scanDetails map[string]string) ([]string, error) {
+func GetScanList(scanDetails map[string]string, enableLogging bool) ([]string, error) {
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/GetScanList.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for GetScanList:", err)
-		return nil, err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/GetScanList.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for GetScanList:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	// start of script
 	logger.Printf("------- Start of GetScanList Script ---------")
 	//initalizing variables for the scan name
@@ -384,16 +404,7 @@ func GetScanList(scanDetails map[string]string) ([]string, error) {
 	for key, value := range scanDetails {
 		logger.Printf("current key is: %s and the value is: %s\n", key, value)
 		switch key {
-		case "CT":
-			logger.Printf("%s found adding %s to the Scans", key, value)
-			ListOfScans = append(ListOfScans, key)
-		case "PANO":
-			logger.Printf("%s found adding %s to the Scans", key, value)
-			ListOfScans = append(ListOfScans, key)
-		case "CEPH":
-			logger.Printf("%s found adding %s to the Scans", key, value)
-			ListOfScans = append(ListOfScans, key)
-		case "SCENE":
+		case "CT", "PANO", "CEPH", "SCENE":
 			logger.Printf("%s found adding %s to the Scans", key, value)
 			ListOfScans = append(ListOfScans, key)
 		}
@@ -407,16 +418,22 @@ func GetScanList(scanDetails map[string]string) ([]string, error) {
 }
 
 // takes in a map of scan details and constructs a string with the details
-func MakeScanName(scanDetails map[string]string) (string, error) {
+func MakeScanName(scanDetails map[string]string, enableLogging bool) (string, error) {
 	startTime := time.Now()
 	// creates a logger for log files.
-	logFileName := "logs/MakeScanName.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for MakeScanName:", err)
-		return "error", err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/MakeScanName.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for MakeScanName:", err)
+			return "Error making log file for MakeScanName", err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	// start of script
 	logger.Printf("------- Start of MakeScanName Script ---------")
 	//initalizing variables for the scan name
@@ -424,7 +441,7 @@ func MakeScanName(scanDetails map[string]string) (string, error) {
 	var Fov string
 	var CompleteName string
 	//grab a []string of scans and add them together.
-	ListOfScans, err := GetScanList(scanDetails)
+	ListOfScans, err := GetScanList(scanDetails, enableLogging)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -461,16 +478,22 @@ func MakeScanName(scanDetails map[string]string) (string, error) {
 // example output [output paths]map[type of scan or scan detail]values
 // /Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687
 // map[CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.8332.1 FOV:15X15 ManufacturerModelName:[PreXion3D Explorer] PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.11336.1 PatientBirthDate:[20010101] PatientID:[02181963] PatientName:[Case^Number 8]]
-func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) {
+func GetDicomFolders(searchFolder string, enableLogging bool) (map[string]map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
-	logFileName := "logs/GetDicomFolders.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for GetDicomFolders:", err)
-		return nil, err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/GetDicomFolders.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for GetDicomFolders:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	//start of script
 	logger.Printf("checking if %s contain valid dicom Folders", searchFolder)
 	//gets a list of all the folders in the searchFolder directory
@@ -483,7 +506,7 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 	//check to see if the folders in the list are scans
 	for _, folder := range folderList {
 		logger.Println("checking :", folder)
-		folderInfo, err := CheckDicomFolder(folder)
+		folderInfo, err := CheckDicomFolder(folder, enableLogging)
 		//if not a valid folder skip and check the next.
 		if err != nil {
 			logger.Println("error grabbing folderInfo when running CheckDicomFolder", err)
@@ -503,17 +526,22 @@ func GetDicomFolders(searchFolder string) (map[string]map[string]string, error) 
 
 // takes a parent dicomFolderPath that contains subfolders and returns a map with keys[manufacturerModelname,Scan type(PANO,CT,SCENE,etc..),FOV(if applicable)] and values [Folder path,fov size, name of scanner]
 // example map[CT:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.8332.1 FOV:15X15 ManufacturerModelName:[PreXion3D Explorer] PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344460687/1.2.392.200036.9163.41.127414021.344460687.11336.1]
-func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
+func CheckDicomFolder(dicomFolderPath string, enableLogging bool) (map[string]string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
-	logFileName := "logs/CheckDicomFolder.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for CheckDicomFolder:", err)
-		// return "Error making log file for CheckDicomFolder:", err
-		return nil, err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/CheckDicomFolder.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for CheckDicomFolder:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	//start of script
 	logger.Printf("------- Start of CheckDicomFolder Script ---------")
 	logger.Printf("checking to see if %s is a regular CT Scan or others", dicomFolderPath)
@@ -532,7 +560,7 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 	for index, subFolder := range subFolderList {
 		logger.Printf("subFolder checking %s\n", subFolder)
 		//entered subfolder grabbing files to loop thru
-		folderFiles, err := GetFilePathsInFolders(subFolder)
+		folderFiles, err := GetFilePathsInFolders(subFolder, enableLogging)
 		if err != nil {
 			logger.Println("error grabbing folderFiles", err)
 			logger.Printf("------- End of CheckDicomFolder Script ---------\n\n")
@@ -540,7 +568,7 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 		}
 		//grab a file from the subfolder and check to see if file is a valid dicom file if so assign the value and break out of the loop
 		for _, file := range folderFiles {
-			currentFileInfo, err := CheckScanType(file)
+			currentFileInfo, err := CheckScanType(file, enableLogging)
 			//if the file is not a valid dicom file continue(skip) current file and ignore the rest of the loops function with the "continue"
 			if err != nil {
 				//fmt.Println("ran into an issue checking scan type for :", file)
@@ -581,20 +609,26 @@ func CheckDicomFolder(dicomFolderPath string) (map[string]string, error) {
 
 // takes a dicomFile and checks to see what type of scan it is returns map with the scan details.
 // example results -> map[ManufacturerModelName:[PreXion3D Explorer PRO] PANO:/Users/harrymbp/Developer/Projects/PreXion/temp/1.2.392.200036.9163.41.127414021.344261765/1.2.392.200036.9163.41.127414021.344261765.10632.1 PatientBirthDate:[20000101] PatientID:[07301985jc] PatientName:[Case^Number 6]]
-func CheckScanType(dicomFilePath string) (map[string]string, error) {
+func CheckScanType(dicomFilePath string, enableLogging bool) (map[string]string, error) {
 	//creates a logger for log files.
-	logFileName := "logs/CheckScanType.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for CheckScanType:", err)
-		return nil, err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/CheckScanType.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for CheckScanType:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	//start of script
 	logger.Printf("------- Start of CheckScanType Script ---------")
 	logger.Printf("checking to see what type of scan %s is", dicomFilePath)
 	//check to see if file path given is a valid dicom
-	dicomInfo, err := DicomInfoGrabber(dicomFilePath)
+	dicomInfo, err := DicomInfoGrabber(dicomFilePath, enableLogging)
 	if err != nil {
 		logger.Printf("%s is not a valid dicom file", dicomFilePath)
 		logger.Printf("------- End of CheckScanType Script ---------\n\n")
@@ -679,7 +713,7 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 	dicomContents[scanType] = path
 	//if there is a CT scan grab the FOV Value
 	if scanType == "CT" {
-		fovSize, err := GetFOVSize(dicomInfo, path)
+		fovSize, err := GetFOVSize(dicomInfo, path, enableLogging)
 		if err != nil {
 			logger.Printf("%s is not a valid dicom file", dicomFilePath)
 			return nil, err
@@ -692,16 +726,22 @@ func CheckScanType(dicomFilePath string) (map[string]string, error) {
 }
 
 // takes dicomInfo and path string and calculates the FOV used and returns the string with the FOV size example "15X15"
-func GetFOVSize(dicomInfo map[string]string, path string) (string, error) {
+func GetFOVSize(dicomInfo map[string]string, path string, enableLogging bool) (string, error) {
 	startTime := time.Now()
 	//creates a logger for log files.
-	logFileName := "logs/GetFOVSize.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for GETFOVSize:", err)
-		return "error", err
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/GetFOVSize.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for GetFOVSize:", err)
+			return "Error making log file for GetFOVSize", err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	//start of script
 	logger.Printf("Starting function GetFOVSize on \n%s\n", path)
 	//setting varible
@@ -748,14 +788,20 @@ func GetFOVSize(dicomInfo map[string]string, path string) (string, error) {
 }
 
 // checks to see if the filepath provided is a dicom file if so return dicom info.
-func DicomInfoGrabber(dicomFilePath string) (map[string]string, error) {
-	logFileName := "logs/DicomInfoGrabber.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for DicomInfoGrabber:", err)
-		return nil, err
+func DicomInfoGrabber(dicomFilePath string, enableLogging bool) (map[string]string, error) {
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/DicomInfoGrabber.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for DicomInfoGrabber:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	//start of script
 	logger.Println("checking if :", dicomFilePath, " is a valid Dicom..")
 	dicomInfo := make(map[string]string)
@@ -840,18 +886,24 @@ func isEmptyDirectory(dirPath string) bool {
 }
 
 // searches through the provided folder and gives all the filepaths as a slice.
-func GetFilePathsInFolders(directoryPath string) ([]string, error) {
-	logFileName := "logs/GetFilePathsInSubfolders.txt"
-	logger, logFile, err := createLogger(logFileName)
-	if err != nil {
-		fmt.Println("Error making log file for GetFilePathsInSubfolders", err)
-		return nil, err
+func GetFilePathsInFolders(directoryPath string, enableLogging bool) ([]string, error) {
+	var logger *log.Logger
+	if enableLogging {
+		logFileName := "logs/SampleFunction.txt"
+		newLog, logFile, err := createLogger(logFileName)
+		logger = newLog
+		if err != nil {
+			fmt.Println("Error making log file for SampleFunction:", err)
+			return nil, err
+		}
+		defer logFile.Close()
+	} else {
+		logger = log.New(os.NewFile(0, "null"), "", 0)
 	}
-	defer logFile.Close()
 	logger.Println("Searching through path:", directoryPath)
 	var filePaths []string
 	// Walk through the directory and its subdirectories
-	err = filepath.WalkDir(directoryPath, func(path string, d fs.DirEntry, err error) error {
+	err := filepath.WalkDir(directoryPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -907,17 +959,22 @@ func copyFile(inputFile, outputPath string) error {
 }
 
 // // takes in dicomFolderPath map[string]string ([dicomfolder]outputFolder), detailList | Open the file and modify it then save to output Path
-// func SampleFunction(dicomFolder, outputFolder string) (string, error) {
+// func SampleFunction(dicomFolder, outputFolder string, enableLogging bool) (string, error) {
 // 	// Block of code for logger
 // 	startTime := time.Now()
-// 	// creates a logger for log files.
+// 	var logger *log.Logger
+// if enableLogging {
 // 	logFileName := "logs/SampleFunction.txt"
-// 	logger, logFile, err := createLogger(logFileName)
+// 	newLog, logFile, err := createLogger(logFileName)
+// 	logger = newLog
 // 	if err != nil {
 // 		fmt.Println("Error making log file for SampleFunction:", err)
-// 		return "error", err
+// 		return nil, err
 // 	}
 // 	defer logFile.Close()
+// } else {
+// 	logger = log.New(os.NewFile(0, "null"), "", 0)
+// }
 // 	// start of script
 // 	logger.Printf("------- Start of SampleFunction Script ---------")
 // 	// main function starts here
