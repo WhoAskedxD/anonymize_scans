@@ -33,7 +33,7 @@ func MakeDicom(fileList []string, outputPath string, newDicomAttribute map[tag.T
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	// start of script
 	logger.Printf("------- Start of MakeDicom Script ---------")
@@ -108,7 +108,7 @@ func MakeStudyFolder(folderInfo map[string]string, newDicomAttribute map[tag.Tag
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	// start of script
 	logger.Printf("------- Start of MakeStudyFolder Script ---------")
@@ -153,7 +153,7 @@ func MakeStudyFolder(folderInfo map[string]string, newDicomAttribute map[tag.Tag
 	endTime := time.Now()
 	elapsedTime := endTime.Sub(startTime)
 	logger.Printf("------- End of MakeStudyFolder Script ---------\n\n")
-	fmt.Printf("Elapsed time: %.2f seconds for MakeStudyFolder\n", elapsedTime.Seconds())
+	logger.Printf("Elapsed time: %.2f seconds for MakeStudyFolder\n", elapsedTime.Seconds())
 	return nil
 }
 
@@ -172,7 +172,7 @@ func MakeOutputPath(parentFolderPath, outputFolderPath string, uid int, scanDeta
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	// start of script
 	logger.Printf("------- Start of MakeOutputPath Script ---------")
@@ -253,7 +253,7 @@ func LogAnonymizedScan(scanDetails map[string]string, newScanInfo map[tag.Tag]st
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	// start of script
 	logger.Printf("------- Start of LogAnonymizedScan Script ---------")
@@ -314,7 +314,7 @@ func RandomizePatientInfo(scanDetails map[string]string, enableLogging bool) (ma
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	// start of script
 	logger.Printf("------- Start of RandomizePatientInfo Script ---------")
@@ -395,7 +395,7 @@ func GetScanList(scanDetails map[string]string, enableLogging bool) ([]string, e
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	// start of script
 	logger.Printf("------- Start of GetScanList Script ---------")
@@ -432,7 +432,7 @@ func MakeScanName(scanDetails map[string]string, enableLogging bool) (string, er
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	// start of script
 	logger.Printf("------- Start of MakeScanName Script ---------")
@@ -492,7 +492,7 @@ func GetDicomFolders(searchFolder string, enableLogging bool) (map[string]map[st
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	//start of script
 	logger.Printf("checking if %s contain valid dicom Folders", searchFolder)
@@ -540,7 +540,7 @@ func CheckDicomFolder(dicomFolderPath string, enableLogging bool) (map[string]st
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	//start of script
 	logger.Printf("------- Start of CheckDicomFolder Script ---------")
@@ -622,7 +622,7 @@ func CheckScanType(dicomFilePath string, enableLogging bool) (map[string]string,
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	//start of script
 	logger.Printf("------- Start of CheckScanType Script ---------")
@@ -740,7 +740,7 @@ func GetFOVSize(dicomInfo map[string]string, path string, enableLogging bool) (s
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	//start of script
 	logger.Printf("Starting function GetFOVSize on \n%s\n", path)
@@ -800,7 +800,7 @@ func DicomInfoGrabber(dicomFilePath string, enableLogging bool) (map[string]stri
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	//start of script
 	logger.Println("checking if :", dicomFilePath, " is a valid Dicom..")
@@ -898,7 +898,7 @@ func GetFilePathsInFolders(directoryPath string, enableLogging bool) ([]string, 
 		}
 		defer logFile.Close()
 	} else {
-		logger = log.New(os.NewFile(0, "null"), "", 0)
+		logger = log.New(io.Discard, "", 0)
 	}
 	logger.Println("Searching through path:", directoryPath)
 	var filePaths []string
@@ -953,12 +953,10 @@ func copyFile(inputFile, outputPath string) error {
 		fmt.Println("Error copying file:", err)
 		return err
 	}
-
 	// fmt.Println("File copied successfully.")
 	return nil
 }
 
-// // takes in dicomFolderPath map[string]string ([dicomfolder]outputFolder), detailList | Open the file and modify it then save to output Path
 // func SampleFunction(dicomFolder, outputFolder string, enableLogging bool) (string, error) {
 // 	// Block of code for logger
 // 	startTime := time.Now()
